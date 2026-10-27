@@ -110,6 +110,28 @@ a { color: var(--brand); }
   font-size: 17px; line-height: 1; flex: none;
 }
 
+.sync-chip { position: relative; font-size: 16px; }
+.sync-chip[hidden] { display: none; }
+.sync-chip::after {
+  content: ""; position: absolute; right: 2px; bottom: 2px; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--surface); background: var(--lv0);
+}
+.sync-chip.synced::after { background: var(--ok); }
+.sync-chip.syncing::after, .sync-chip.loading::after { background: var(--sun); }
+.sync-chip.error::after { background: var(--ng); }
+
+/* ───── sync panel ───── */
+.panel.sync { background: linear-gradient(135deg, var(--west-bg), var(--surface) 60%); scroll-margin-top: 120px; }
+.sync-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sync-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--lv0); flex: none; }
+.sync-dot.synced { background: var(--ok); }
+.sync-dot.syncing { background: var(--sun); }
+.sync-dot.error { background: var(--ng); }
+.sync-who { display: flex; flex-direction: column; line-height: 1.4; min-width: 0; }
+.sync-who span { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.sync-state { margin-left: auto; font-size: 13px; color: var(--muted); }
+.sync-err { background: var(--ng-bg); color: var(--ng); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 8px 0 0; }
+
 main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 20px 16px 40px; flex: 1; }
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 16px; border-top: 1px solid var(--line); background: var(--surface); }
 

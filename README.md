@@ -17,8 +17,43 @@
 学習記録は「ライトナー方式」で管理しています。正解すると箱が1つ上がり、間違えると2つ下がります。
 カードやクイズでは **苦手な人物・未学習の人物ほど出題されやすく** なります。
 
-学習記録・お気に入り・メモはブラウザの `localStorage` に保存され、外部には送信されません。
-端末を変えるときは「記録」画面の「学習記録を書き出す」→ 別の端末で「読み込む」を使ってください。
+学習記録・お気に入り・メモはブラウザの `localStorage` に保存されます。
+「記録」画面で Google アカウントにログインすると、Firebase（Cloud Firestore）を通して
+**同じアカウントでログインしたほかの端末と自動的に共有**されます（下記「端末間の同期の設定」）。
+ログインしなければ、これまでどおり端末の中だけで動き、外部には何も送信されません。
+
+## 端末間の同期の設定（Firebase）
+
+1回だけ、Firebase コンソール（https://console.firebase.google.com/ ）で次の設定をします。
+
+1. **ウェブアプリの設定値を入れる**
+   ⚙「プロジェクトの設定」→「マイアプリ」でウェブアプリ（`</>`）を選び（なければ追加し）、
+   表示される `firebaseConfig` の中身を [`js/firebase-config.js`](js/firebase-config.js) の `null` の代わりに貼り付けます。
+   この値は公開されても問題のないもので、データの保護は次の4のルールで行います。
+2. **Google ログインを有効にする**
+   「Authentication」→「Sign-in method」→「Google」を有効にします。
+3. **このサイトのドメインを許可する**
+   「Authentication」→「設定」→「承認済みドメイン」に `shuichifujii-pastor.github.io` を追加します。
+4. **Firestore を用意してルールを追加する**
+   「Firestore Database」を作成し（まだの場合）、「ルール」に次の `match` ブロックを追加して公開します。
+   ほかのアプリのルールがすでにある場合は、消さずにこのブロックを書き足してください。
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       // 歴史人名辞典：本人だけが自分の学習記録を読み書きできる
+       match /jinmeiProgress/{uid} {
+         allow read, write: if request.auth != null && request.auth.uid == uid;
+       }
+     }
+   }
+   ```
+
+しくみ：ログイン中のユーザーごとに `jinmeiProgress/{ユーザーID}` に記録を1件保存します。
+各端末の記録とクラウドの記録は、人物ごと・お気に入りごと・メモごとに「新しい方」を採用して統合するので、
+オフラインで学習した分も、次にネットにつながったときに失われずに合わさります。
+「すべてリセット」はログイン中のすべての端末に反映されます。
 
 ## GitHub Pages で公開する手順
 
@@ -69,4 +104,6 @@ js/details-west.js     人物の詳しい解説（西洋）
 js/details-japan.js    人物の詳しい解説（日本）
 js/events.js           年表の大きな出来事（約200件）
 js/app.js              アプリ本体（辞典・年表・カード・クイズ・記録）
+js/firebase-config.js  Firebase の設定値（同期を使うときに記入）
+js/sync.js             端末間の同期（Google ログイン + Firestore）
 ```

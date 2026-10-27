@@ -63,18 +63,65 @@
     return out;
   }
 
-  // ───────── 保存（このブラウザの localStorage） ─────────
+  // ───────── 保存（このブラウザの localStorage。ログイン中は sync.js が Firestore と同期） ─────────
+  // 端末間で統合できるよう、項目ごとに更新時刻を持つ：
+  //   prog[id].t / favT[id] = {on, t} / noteT[id] / resetAt（リセットした時刻。それ以前の記録は捨てる）
   const KEY = 'jinmei-jiten-v1';
-  const blank = () => ({ prog: {}, fav: [], notes: {}, days: [], pref: {} });
+  const blank = () => ({ prog: {}, fav: [], favT: {}, notes: {}, noteT: {}, days: [], pref: {}, resetAt: 0 });
+  const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // 古い形式（時刻なし）のデータも読めるようにそろえる
+  function normalize(s) {
+    const o = Object.assign(blank(), s && typeof s === 'object' ? s : {});
+    o.favT = { ...(o.favT || {}) };
+    o.noteT = { ...(o.noteT || {}) };
+    (o.fav || []).forEach(id => { if (!o.favT[id]) o.favT[id] = { on: true, t: 1 }; });
+    Object.keys(o.notes || {}).forEach(id => { if (!o.noteT[id]) o.noteT[id] = 1; });
+    o.fav = Object.keys(o.favT).filter(id => o.favT[id].on);
+    return o;
+  }
+  // 2つの記録を統合する。項目ごとに新しい方を採用し、学習日は合併する
+  function mergeStates(a, b) {
+    a = normalize(a); b = normalize(b);
+    const o = blank();
+    o.resetAt = Math.max(a.resetAt || 0, b.resetAt || 0);
+    o.pref = a.pref || {};
+    const keys = (x, y) => [...new Set([...Object.keys(x), ...Object.keys(y)])];
+    for (const id of keys(a.prog, b.prog)) {
+      const ra = a.prog[id], rb = b.prog[id];
+      const r = !ra ? rb : !rb ? ra : (rb.t > ra.t ? rb : ra);
+      if (r && r.t > o.resetAt) o.prog[id] = r;
+    }
+    for (const id of keys(a.favT, b.favT)) {
+      const fa = a.favT[id], fb = b.favT[id];
+      const f = !fa ? fb : !fb ? fa : (fb.t > fa.t ? fb : fa);
+      if (f && f.t > o.resetAt) o.favT[id] = f;
+    }
+    o.fav = Object.keys(o.favT).filter(id => o.favT[id].on);
+    for (const id of keys(a.noteT, b.noteT)) {
+      const ta = a.noteT[id] ?? -1, tb = b.noteT[id] ?? -1;
+      const src = tb > ta ? b : a;
+      const t = Math.max(ta, tb);
+      if (t <= o.resetAt) continue;
+      o.noteT[id] = t;
+      if (src.notes[id]) o.notes[id] = src.notes[id];
+    }
+    const resetDay = o.resetAt ? dayKey(new Date(o.resetAt)) : '';
+    o.days = [...new Set([...a.days, ...b.days])].filter(d => d >= resetDay).sort().slice(-400);
+    return o;
+  }
   let S = load();
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
-      if (s && typeof s === 'object') return Object.assign(blank(), s);
+      if (s && typeof s === 'object') return normalize(s);
     } catch (e) { /* 保存できない環境でも動かす */ }
     return blank();
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } }
+  const saveListeners = [];
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+    saveListeners.forEach(f => { try { f(); } catch (e) { /* ignore */ } });
+  }
 
   // ───────── 学習レベル（ライトナー方式：箱0〜5） ─────────
   const LEVELS = ['未学習', '苦手', '学習中', '定着', '習得'];
@@ -214,6 +261,7 @@
     $('#note', dlg).addEventListener('input', e => {
       const v = e.target.value;
       if (v.trim()) S.notes[id] = v; else delete S.notes[id];
+      S.noteT[id] = Date.now();
       save();
     });
     if (!dlg.open) dlg.showModal();
@@ -224,7 +272,9 @@
     const f = e.target.closest('[data-fav]');
     if (f) {
       const id = f.dataset.fav;
-      S.fav = isFav(id) ? S.fav.filter(x => x !== id) : [...S.fav, id];
+      const on = !isFav(id);
+      S.favT[id] = { on, t: Date.now() };
+      S.fav = on ? [...S.fav, id] : S.fav.filter(x => x !== id);
       save();
       openDetail(id);
     }
@@ -665,6 +715,8 @@
         <div class="kpi"><div class="k">連続学習</div><div class="v">${streak()}<small> 日</small></div></div>
       </div>
 
+      <section class="panel sync" id="syncPanel"></section>
+
       <section class="panel">
         <h2>時代別の定着度</h2>
         <div class="legend">${[4, 3, 2, 1, 0].map(l => `<span class="lv lv${l}">${LEVELS[l]}</span>`).join('')}</div>
@@ -694,7 +746,7 @@
 
       <section class="panel">
         <h2>データの管理</h2>
-        <p class="lead">学習記録はこのブラウザにだけ保存されています。別の端末で続けたいときは、書き出したファイルを読み込んでください。</p>
+        <p class="lead">ログインしていないときは、学習記録はこのブラウザにだけ保存されます。ファイルに書き出して保管したり、別の端末で読み込んで統合したりもできます。</p>
         <div class="btns">
           <button class="btn" id="exp">学習記録を書き出す</button>
           <label class="btn">学習記録を読み込む<input type="file" id="imp" accept="application/json,.json" hidden></label>
@@ -717,8 +769,8 @@
       try {
         const obj = JSON.parse(await file.text());
         if (!obj || typeof obj.prog !== 'object') throw new Error('bad');
-        if (!confirm('現在の学習記録を、読み込んだファイルの内容で置き換えます。よろしいですか？')) return;
-        S = Object.assign(blank(), obj);
+        if (!confirm('読み込んだファイルの学習記録を、現在の記録に統合します（同じ人物は新しい方の記録を残します）。よろしいですか？')) return;
+        S = mergeStates(S, obj);
         save();
         toast('読み込みました');
         renderStats();
@@ -727,13 +779,86 @@
       }
     });
     $('#reset').addEventListener('click', () => {
-      if (!confirm('学習記録・お気に入り・メモをすべて消去します。元に戻せません。よろしいですか？')) return;
+      const synced = window.JinmeiSync && window.JinmeiSync.user;
+      if (!confirm(`学習記録・お気に入り・メモをすべて消去します${synced ? '（同期しているほかの端末からも消えます）' : ''}。元に戻せません。よろしいですか？`)) return;
       S = blank();
+      S.resetAt = Date.now();
       save();
       toast('リセットしました');
       renderStats();
     });
+    renderSyncPanel();
   }
+
+  // ───────── 端末間の同期（実際の通信は sync.js） ─────────
+  function renderSyncPanel() {
+    const el = $('#syncPanel');
+    if (!el) return;
+    const s = window.JinmeiSync || { state: 'loading' };
+    const head = '<h2>☁️ 端末間の同期</h2>';
+    if (s.state === 'unconfigured') {
+      el.innerHTML = `${head}<p class="lead">同期の設定（js/firebase-config.js）がまだ入っていません。設定が入ると、Googleアカウントでログインして、パソコンとスマホなどで学習記録・お気に入り・メモを共有できます。</p>`;
+      return;
+    }
+    if (s.state === 'loading') {
+      el.innerHTML = `${head}<p class="lead">同期の準備をしています…</p>`;
+      return;
+    }
+    const err = s.error ? `<p class="sync-err">⚠️ ${esc(s.error)}</p>` : '';
+    if (!s.user) {
+      el.innerHTML = `${head}
+        <p class="lead">Googleアカウントでログインすると、学習記録・お気に入り・メモがほかの端末と自動的に共有されます。この端末の記録は、ログイン時にクラウドの記録と統合されます。</p>
+        ${err}
+        <div class="btns"><button class="btn primary" id="syncIn">Googleアカウントでログイン</button></div>`;
+      $('#syncIn').addEventListener('click', () => s.signIn && s.signIn());
+      return;
+    }
+    const label = { syncing: '同期しています…', synced: '同期済み', error: '同期できませんでした' }[s.state] || '';
+    const when = s.lastSync ? `（${s.lastSync.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}）` : '';
+    el.innerHTML = `${head}
+      <div class="sync-row">
+        <span class="sync-dot ${esc(s.state)}"></span>
+        <div class="sync-who"><strong>${esc(s.user.name || 'ログイン中')}</strong><span>${esc(s.user.email || '')}</span></div>
+        <span class="sync-state">${label}${s.state === 'synced' ? when : ''}</span>
+      </div>
+      ${err}
+      <p class="lead" style="margin-top:10px">同じGoogleアカウントでログインした端末どうしで、記録が自動的に共有されます。ログアウトしても、この端末の記録はそのまま残ります。</p>
+      <div class="btns"><button class="btn" id="syncOut">ログアウト</button></div>`;
+    $('#syncOut').addEventListener('click', () => s.signOut && s.signOut());
+  }
+  const syncChip = $('#syncChip');
+  function updateSyncChip() {
+    const s = window.JinmeiSync;
+    if (!syncChip) return;
+    const show = s && s.state !== 'unconfigured';
+    syncChip.hidden = !show;
+    if (!show) return;
+    const st = s.user ? s.state : 'off';
+    syncChip.className = `theme-btn sync-chip ${st}`;
+    syncChip.title = { off: '同期していません（タップしてログイン）', syncing: '同期しています', synced: '同期済み', error: '同期できませんでした', loading: '同期の準備中' }[st] || '';
+  }
+  syncChip?.addEventListener('click', () => {
+    location.hash = '#/stats';
+    setTimeout(() => $('#syncPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  });
+  window.addEventListener('jinmei-sync', () => { updateSyncChip(); renderSyncPanel(); });
+
+  // sync.js から使う窓口
+  window.JinmeiApp = {
+    getState: () => S,
+    merge: mergeStates,
+    onSave: f => saveListeners.push(f),
+    // クラウドの記録を統合する。変化があれば保存して画面を更新し true を返す
+    applyRemote(remote) {
+      const m = mergeStates(S, remote);
+      if (JSON.stringify(m) === JSON.stringify(S)) return false;
+      S = m;
+      save();
+      if (current === 'stats') renderStats();
+      if (current === 'dict') updateList();
+      return true;
+    },
+  };
 
   // ───────── キーボード操作 ─────────
   document.addEventListener('keydown', e => {
