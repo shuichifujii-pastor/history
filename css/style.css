@@ -366,7 +366,9 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
   border-radius: 12px; padding: 10px 12px; font-size: 13px;
 }
 .detail .learn .sp { flex: 1; }
-.detail textarea { min-height: 70px; resize: vertical; }
+/* 自分用メモ：内容に合わせて縦に伸びる（高さは app.js の fitNote で調整） */
+.detail { padding-bottom: 76px !important; }   /* 右下の読み上げボタンに隠れないように */
+.detail textarea#note { min-height: 80px; resize: none; overflow: hidden; line-height: 1.7; }
 .badges { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ───── timeline ───── */

@@ -269,6 +269,16 @@
     return same;
   }
   const backBtn = () => (dlgHist.length ? '<button class="back" data-back>← 戻る</button>' : '');
+  // 自分用メモの欄を、書いた内容がすべて見える高さに合わせる
+  function fitNote(ta) {
+    if (!ta || !ta.isConnected) return;
+    const top = dlg.scrollTop;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight + 2}px`;
+    dlg.scrollTop = top;   // 高さを測り直す間に画面が動かないようにする
+  }
+  window.addEventListener('resize', () => { if (dlg.open) fitNote($('#note', dlg)); });
+
   function showDlg(keepScroll) {
     if (!dlg.open) dlg.showModal();
     if (!keepScroll) dlg.scrollTop = 0;
@@ -319,13 +329,16 @@
         <h3>自分用メモ</h3>
         <textarea id="note" placeholder="覚え方や関連事項などを自由に書けます（自動保存）">${esc(S.notes[id] || '')}</textarea>
       </article>`;
-    $('#note', dlg).addEventListener('input', e => {
+    const note = $('#note', dlg);
+    note.addEventListener('input', e => {
       const v = e.target.value;
       if (v.trim()) S.notes[id] = v; else delete S.notes[id];
       S.noteT[id] = Date.now();
       save();
+      fitNote(note);
     });
     showDlg(keepScroll);
+    fitNote(note);   // 表示されてから高さを測る
   }
 
   // 出来事の詳細
