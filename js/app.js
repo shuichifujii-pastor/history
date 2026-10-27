@@ -1078,7 +1078,8 @@
     const words = norm(q).split(/\s+/).filter(Boolean);
     if (!words.length) return { q, words, people: [], events: [] };
     const nameHit = h => (words.every(w => h.includes(w)) ? 0 : 1);
-    const people = PEOPLE.filter(p => words.every(w => p.text.includes(w)))
+    // 人物は本文に加えて、その人の「自分用メモ」も検索の対象にする（メモは書き換わるので毎回読む）
+    const people = PEOPLE.filter(p => { const t = `${p.text} ${norm(S.notes[p.id] || '')}`; return words.every(w => t.includes(w)); })
       .sort((a, b) => nameHit(a.head) - nameHit(b.head) || a.y - b.y);
     const events = EVENTS.filter(e => words.every(w => e.text.includes(w)))
       .sort((a, b) => nameHit(a.head) - nameHit(b.head) || a.y - b.y);
@@ -1116,11 +1117,19 @@
     if (!words.length) { gsPanel.hidden = true; return; }
     const onTl = current === 'timeline';
     const lim = gsAll ? Infinity : 8;
-    const pItem = p => `
+    const pItem = p => {
+      const fields = [p.desc, p.keys.join('・'), p.detail, p.sub, p.alias.join('、')];
+      const note = S.notes[p.id] || '';
+      const inNote = note && words.some(w => norm(note).includes(w));
+      const inText = words.some(w => norm([p.name, ...fields].join(' ')).includes(w));
+      // 本文に見つからずメモだけに見つかった場合は、メモの該当箇所を見せる
+      const s = inNote && !inText ? `<span class="gs-note">📝 メモ</span>${snip([note], words)}` : snip(fields, words);
+      return `
       <button class="gs-item" data-gs="p:${esc(p.id)}">
-        <span class="gs-t">${hl(p.name, words)}<small>${esc(lifeOf(p))}</small>${regionBadge(p)}</span>
-        <span class="gs-s">${snip([p.desc, p.keys.join('・'), p.detail, p.sub, p.alias.join('、')], words)}</span>
+        <span class="gs-t">${hl(p.name, words)}<small>${esc(lifeOf(p))}</small>${regionBadge(p)}${inNote && inText ? '<span class="gs-note">📝 メモにも</span>' : ''}</span>
+        <span class="gs-s">${s}</span>
       </button>`;
+    };
     const eItem = e => `
       <button class="gs-item" data-gs="e:${esc(e.key)}">
         <span class="gs-t"><b class="gs-yr">${esc(e.l || fy(e.y))}</b>${hl(e.t, words)}<span class="badge ${RC[e.r]}">${e.r}</span></span>
