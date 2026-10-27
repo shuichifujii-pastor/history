@@ -141,6 +141,25 @@ mark { background: #ffe27a; color: inherit; border-radius: 3px; padding: 0 1px; 
   background: var(--ink); color: var(--surface); padding: 6px 8px 6px 14px; border-radius: 999px; box-shadow: var(--shadow); font-size: 13px;
 }
 .gs-step[hidden] { display: none; }
+
+/* ───── 読み上げ ───── */
+#ttsBtn.on { background: var(--brand); border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+body.read-mode #view, body.read-mode dialog#detail .detail { cursor: text; }
+.reading { background: var(--sun-bg) !important; box-shadow: 0 0 0 3px var(--sun) !important; border-radius: 8px; }
+.tts-bar {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 70;
+  display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: center;
+  background: var(--brand); color: #fff; padding: 6px 8px 6px 14px; border-radius: 999px; box-shadow: 0 8px 24px rgba(40, 30, 120, .35); font-size: 13px;
+}
+.tts-bar[hidden] { display: none; }
+.tts-st { font-weight: 700; white-space: nowrap; }
+.tts-bar button, .tts-bar select {
+  border: 0; border-radius: 999px; padding: 6px 12px; background: rgba(255, 255, 255, .2); color: #fff; font-weight: 700; white-space: nowrap; font-size: 13px;
+}
+.tts-bar select { width: auto; }
+.tts-bar select option { color: #222; }
+.tts-bar button:hover { background: rgba(255, 255, 255, .32); }
+body.read-mode .gs-step { bottom: 76px; }
 .gs-step-q { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30vw; }
 .gs-step-n { font-variant-numeric: tabular-nums; opacity: .8; white-space: nowrap; }
 .gs-step button { border: 0; border-radius: 999px; padding: 6px 12px; background: color-mix(in srgb, var(--surface) 18%, transparent); color: var(--surface); font-weight: 700; white-space: nowrap; }
@@ -460,6 +479,12 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
   .gs-panel { position: fixed; top: calc(var(--hdr, 110px) + 4px); left: 8px; right: 8px; width: auto; max-height: calc(100vh - var(--hdr, 110px) - 16px); }
   .gs-step { bottom: 12px; gap: 6px; font-size: 12px; }
   .gs-step button { padding: 6px 10px; }
+  .tts-bar { bottom: 10px; gap: 5px; padding: 6px; border-radius: 18px; font-size: 12px; }
+  .tts-bar .tts-st { width: 100%; text-align: center; }
+  .tts-bar button, .tts-bar select { padding: 6px 10px; font-size: 12px; }
+  body.read-mode .gs-step { bottom: 96px; }
+  .navwrap { gap: 5px; }
+  .navwrap .theme-btn { width: 34px; height: 34px; font-size: 15px; }
   .navwrap { width: 100%; }
   #nav { flex: 1; justify-content: space-between; }
   #nav a { flex: 1; text-align: center; padding: 6px 2px; font-size: 13px; }

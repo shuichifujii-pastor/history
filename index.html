@@ -7,9 +7,9 @@
   <meta name="description" content="紀元後の西洋史・日本史の人物を調べて、カードとクイズで覚える学習用の人名辞典">
   <meta name="theme-color" content="#6a5cff">
   <!-- アイコン（ブラウザのタブ／スマホのホーム画面） -->
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=11">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=11">
-  <link rel="manifest" href="manifest.webmanifest?v=11">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=12">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=12">
+  <link rel="manifest" href="manifest.webmanifest?v=12">
   <meta name="apple-mobile-web-app-title" content="人名辞典">
   <script>
     try { if (localStorage.getItem('jinmei-theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body>
   <header class="top">
@@ -41,6 +41,7 @@
         <a href="#/quiz" data-r="quiz">クイズ</a>
         <a href="#/stats" data-r="stats">記録</a>
       </nav>
+      <button class="theme-btn" id="ttsBtn" aria-label="読み上げモード" title="読み上げ（タップした箇所から読み上げます）" aria-pressed="false">🔊</button>
       <button class="theme-btn sync-chip" id="syncChip" hidden aria-label="端末間の同期">☁️</button>
       <button class="theme-btn" id="themeBtn" aria-label="明るい表示と暗い表示を切り替える" title="表示の明るさを切り替え">🌙</button>
     </div>
@@ -51,24 +52,25 @@
   <dialog id="detail" aria-label="人物の詳細"></dialog>
 
   <div class="gs-step" id="gsStep" hidden></div>
+  <div class="tts-bar" id="ttsBar" hidden></div>
 
   <footer class="foot">
     学習記録はこのブラウザに保存されます。「記録」画面でGoogleアカウントにログインすると、ほかの端末と共有できます。
   </footer>
 
   <!-- ?v= は更新のたびに上げる版数（ブラウザに古いファイルを使わせないため） -->
-  <script src="js/data.js?v=11"></script>
-  <script src="js/people-modern.js?v=11"></script>
-  <script src="js/details-west.js?v=11"></script>
-  <script src="js/details-japan.js?v=11"></script>
-  <script src="js/events.js?v=11"></script>
-  <script src="js/events-china.js?v=11"></script>
-  <script src="js/event-details.js?v=11"></script>
-  <script src="js/event-more-west.js?v=11"></script>
-  <script src="js/event-more-japan.js?v=11"></script>
-  <script src="js/event-more-china.js?v=11"></script>
-  <script src="js/app.js?v=11"></script>
-  <script src="js/firebase-config.js?v=11"></script>
-  <script type="module" src="js/sync.js?v=11"></script>
+  <script src="js/data.js?v=12"></script>
+  <script src="js/people-modern.js?v=12"></script>
+  <script src="js/details-west.js?v=12"></script>
+  <script src="js/details-japan.js?v=12"></script>
+  <script src="js/events.js?v=12"></script>
+  <script src="js/events-china.js?v=12"></script>
+  <script src="js/event-details.js?v=12"></script>
+  <script src="js/event-more-west.js?v=12"></script>
+  <script src="js/event-more-japan.js?v=12"></script>
+  <script src="js/event-more-china.js?v=12"></script>
+  <script src="js/app.js?v=12"></script>
+  <script src="js/firebase-config.js?v=12"></script>
+  <script type="module" src="js/sync.js?v=12"></script>
 </body>
 </html>

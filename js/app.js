@@ -272,6 +272,7 @@
   function showDlg(keepScroll) {
     if (!dlg.open) dlg.showModal();
     if (!keepScroll) dlg.scrollTop = 0;
+    renderTtsBar();   // 中身を書き換えると読み上げの帯も消えるので、入れ直す
   }
   function contemporaries(p, region, n) {
     return PEOPLE
@@ -1251,6 +1252,156 @@
   new ResizeObserver(setTopH).observe(topBar);
   setTopH();
 
+  // ───────── 読み上げ（タップした箇所から下へ） ─────────
+  // 🔊 で読み上げモードにし、文章をタップすると、その箇所から順に最後まで読み上げる。
+  // 開いている詳細ページがあればその中を、なければ画面本体を読む。
+  const ttsBtn = $('#ttsBtn');
+  const ttsBar = $('#ttsBar');
+  const synth = window.speechSynthesis;
+  const READ_BLOCKS = 'h1,h2,h3,p,li,.badges,.pcard,.tl-ev,.tl .chip,.y,.chips > .chip,.opt,.kpi,.bar-row,.face .big,.face .center,.face .desc,.face .chips';
+  const RATES = [0.8, 1, 1.2, 1.5];
+  const tts = { mode: false, blocks: [], i: 0, parts: [], j: 0, speaking: false, paused: false, session: 0, rate: 1 };
+  try { tts.rate = Number(localStorage.getItem('jinmei-tts-rate')) || 1; } catch (e) { /* ignore */ }
+
+  // 読み上げる文章に整える（記号を読みやすく、学習状況の印などは除く）
+  function readText(el) {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('.pt,.lv,.star,.more,.close,[data-back]').forEach(x => x.remove());
+    // 年だけの表示（出来事の年、年表の年・和暦）には「年」を付ける
+    c.querySelectorAll('.ev-link > b, .gs-yr, .wk span').forEach(b => { if (/\d$|元$/.test(b.textContent)) b.textContent += '年'; });
+    if (c.classList.contains('y') && c.firstChild && c.firstChild.nodeType === 3) c.firstChild.textContent += '年';
+    c.querySelectorAll('small,span,b,.badge').forEach(x => x.before(' '));
+    return c.textContent
+      // 生没年などの「1483–1546」を「1483年から1546年」のように読む
+      .replace(/\?\s*–\s*(前?\d+)(頃)?/g, '$1年$2没')
+      .replace(/(前?\d+)(頃)?\s*–\s*(前?\d+)(頃|年代)?/g, (m, a, b, c2, d) => `${a}年${b || ''}から${c2}${d === '年代' ? '年代' : `年${d || ''}`}`)
+      .replace(/(\d+)(頃)?\s*–(?!\s*[\d前])/g, '$1年$2生まれ')
+      .replace(/[–〜]/g, 'から')
+      .replace(/／/g, '、')
+      .replace(/[›★☆]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  // 長い文は句点で区切って読む（ブラウザによって長い読み上げが途中で止まるため）
+  const splitParts = t => t.split(/(?<=[。！？])/).map(s => s.trim()).filter(Boolean);
+  function collectBlocks(root) {
+    const all = $$(READ_BLOCKS, root).filter(el => el.getClientRects().length && readText(el));
+    return all.filter(el => !all.some(o => o !== el && o.contains(el)));   // 外側の要素だけ残す
+  }
+  const jaVoice = () => (synth.getVoices() || []).find(v => /^ja/i.test(v.lang));
+
+  function renderTtsBar() {
+    // 詳細ページ（ダイアログ）は常に最前面に表示されるため、開いている間は操作の帯をその中へ移す
+    const home = dlg.open ? dlg : document.body;
+    if (ttsBar.parentNode !== home) home.appendChild(ttsBar);
+    if (!tts.mode) { ttsBar.hidden = true; return; }
+    const rateSel = `<select data-tts="rate" aria-label="読み上げの速さ">${RATES.map(r => `<option value="${r}"${r === tts.rate ? ' selected' : ''}>速さ ${r}</option>`).join('')}</select>`;
+    ttsBar.innerHTML = tts.speaking || tts.paused
+      ? `<span class="tts-st">${tts.paused ? '⏸ 一時停止中' : '🔊 読み上げ中'}</span>
+         <button data-tts="${tts.paused ? 'resume' : 'pause'}">${tts.paused ? '▶ 再開' : '⏸ 一時停止'}</button>
+         <button data-tts="stop">⏹ 停止</button>${rateSel}<button data-tts="exit" aria-label="読み上げモードを終える">×</button>`
+      : `<span class="tts-st">👆 読み上げたい場所をタップしてください</span>${rateSel}<button data-tts="exit" aria-label="読み上げモードを終える">×</button>`;
+    ttsBar.hidden = false;
+  }
+  function markReading(el) {
+    $$('.reading').forEach(x => x.classList.remove('reading'));
+    if (!el) return;
+    el.classList.add('reading');
+    const r = el.getBoundingClientRect();
+    const scroller = dlg.open && dlg.contains(el) ? dlg : null;
+    const viewH = scroller ? scroller.clientHeight : innerHeight;
+    if (r.top < 80 || r.bottom > viewH - 90) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function speakNext(session) {
+    if (session !== tts.session || !tts.speaking) return;
+    while (tts.i < tts.blocks.length && tts.j >= tts.parts.length) {
+      tts.i++;
+      tts.j = 0;
+      tts.parts = tts.i < tts.blocks.length ? splitParts(readText(tts.blocks[tts.i])) : [];
+    }
+    if (tts.i >= tts.blocks.length) { stopTts(); return; }
+    if (tts.j === 0) markReading(tts.blocks[tts.i]);
+    const u = new SpeechSynthesisUtterance(tts.parts[tts.j]);
+    u.lang = 'ja-JP';
+    const v = jaVoice();
+    if (v) u.voice = v;
+    u.rate = tts.rate;
+    u.onend = () => { if (session !== tts.session) return; tts.j++; speakNext(session); };
+    u.onerror = () => { if (session !== tts.session) return; tts.j++; speakNext(session); };
+    synth.speak(u);
+  }
+  function startTtsAt(target) {
+    const root = dlg.open ? dlg : view;
+    const blocks = collectBlocks(root);
+    let i = blocks.findIndex(b => b.contains(target) || target.contains(b));
+    if (i < 0) i = blocks.findIndex(b => target.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (i < 0) return;
+    synth.cancel();
+    tts.session++;
+    Object.assign(tts, { blocks, i, j: 0, parts: splitParts(readText(blocks[i])), speaking: true, paused: false });
+    renderTtsBar();
+    speakNext(tts.session);
+  }
+  function stopTts() {
+    tts.session++;
+    synth.cancel();
+    tts.speaking = false;
+    tts.paused = false;
+    markReading(null);
+    renderTtsBar();
+  }
+  function setTtsMode(on) {
+    if (on && !synth) { toast('このブラウザは読み上げに対応していません'); return; }
+    tts.mode = on;
+    document.body.classList.toggle('read-mode', on);
+    ttsBtn.classList.toggle('on', on);
+    ttsBtn.setAttribute('aria-pressed', String(on));
+    if (!on) stopTts();
+    renderTtsBar();
+  }
+  ttsBtn.addEventListener('click', () => setTtsMode(!tts.mode));
+  ttsBar.addEventListener('click', e => {
+    const b = e.target.closest('button[data-tts]');
+    if (!b) return;
+    const a = b.dataset.tts;
+    if (a === 'exit') setTtsMode(false);
+    else if (a === 'stop') stopTts();
+    else if (a === 'pause') {
+      // 一時停止は「止めて位置を覚える」方式（pause() が効かないブラウザがあるため）
+      tts.session++;
+      synth.cancel();
+      tts.speaking = false;
+      tts.paused = true;
+      renderTtsBar();
+    } else if (a === 'resume') {
+      tts.speaking = true;
+      tts.paused = false;
+      tts.session++;
+      renderTtsBar();
+      speakNext(tts.session);
+    }
+  });
+  ttsBar.addEventListener('change', e => {
+    if (e.target.dataset.tts !== 'rate') return;
+    tts.rate = Number(e.target.value);
+    try { localStorage.setItem('jinmei-tts-rate', String(tts.rate)); } catch (err) { /* ignore */ }
+  });
+  // 読み上げモード中のタップは、リンクやボタンの動作の代わりに読み上げを始める
+  document.addEventListener('click', e => {
+    if (!tts.mode) return;
+    const t = e.target;
+    if (t.closest('.top, #ttsBar, #gsStep, .close, [data-back], input, textarea, select') || t === dlg) return;
+    if (!t.closest('#view') && !(dlg.open && dlg.contains(t))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startTtsAt(t);
+  }, true);
+  // 詳細ページが閉じたら読み上げを止め、操作の帯を画面本体へ戻す（open 属性の変化を見て確実に検知する）
+  new MutationObserver(() => {
+    if (dlg.open) return;
+    if (tts.speaking || tts.paused) stopTts(); else renderTtsBar();
+  }).observe(dlg, { attributes: true, attributeFilter: ['open'] });
+
   // ───────── キーボード操作 ─────────
   document.addEventListener('keydown', e => {
     if (dlg.open || e.target.closest?.('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1286,6 +1437,7 @@
     closeGsPanel();
     gsPos = -1;
     renderGsStep();
+    if (tts.speaking || tts.paused) stopTts();
     ROUTES[current]();
     window.scrollTo(0, 0);
   }
