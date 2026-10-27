@@ -1253,9 +1253,8 @@
   setTopH();
 
   // ───────── 読み上げ（タップした箇所から下へ） ─────────
-  // 🔊 で読み上げモードにし、文章をタップすると、その箇所から順に最後まで読み上げる。
+  // 画面右下の「🔊 読み上げ」で読み上げモードにし、文章をタップすると、その箇所から順に最後まで読み上げる。
   // 開いている詳細ページがあればその中を、なければ画面本体を読む。
-  const ttsBtn = $('#ttsBtn');
   const ttsBar = $('#ttsBar');
   const synth = window.speechSynthesis;
   const READ_BLOCKS = 'h1,h2,h3,p,li,.badges,.pcard,.tl-ev,.tl .chip,.y,.chips > .chip,.opt,.kpi,.bar-row,.face .big,.face .center,.face .desc,.face .chips';
@@ -1294,14 +1293,19 @@
     // 詳細ページ（ダイアログ）は常に最前面に表示されるため、開いている間は操作の帯をその中へ移す
     const home = dlg.open ? dlg : document.body;
     if (ttsBar.parentNode !== home) home.appendChild(ttsBar);
-    if (!tts.mode) { ttsBar.hidden = true; return; }
+    ttsBar.hidden = false;
+    ttsBar.classList.toggle('mini', !tts.mode);
+    if (!tts.mode) {
+      // ふだんは画面右下の小さなボタンだけ
+      ttsBar.innerHTML = '<button data-tts="start" aria-label="読み上げを始める" title="タップした箇所から読み上げます">🔊 読み上げ</button>';
+      return;
+    }
     const rateSel = `<select data-tts="rate" aria-label="読み上げの速さ">${RATES.map(r => `<option value="${r}"${r === tts.rate ? ' selected' : ''}>速さ ${r}</option>`).join('')}</select>`;
     ttsBar.innerHTML = tts.speaking || tts.paused
       ? `<span class="tts-st">${tts.paused ? '⏸ 一時停止中' : '🔊 読み上げ中'}</span>
          <button data-tts="${tts.paused ? 'resume' : 'pause'}">${tts.paused ? '▶ 再開' : '⏸ 一時停止'}</button>
          <button data-tts="stop">⏹ 停止</button>${rateSel}<button data-tts="exit" aria-label="読み上げモードを終える">×</button>`
       : `<span class="tts-st">👆 読み上げたい場所をタップしてください</span>${rateSel}<button data-tts="exit" aria-label="読み上げモードを終える">×</button>`;
-    ttsBar.hidden = false;
   }
   function markReading(el) {
     $$('.reading').forEach(x => x.classList.remove('reading'));
@@ -1344,7 +1348,7 @@
   }
   function stopTts() {
     tts.session++;
-    synth.cancel();
+    if (synth) synth.cancel();
     tts.speaking = false;
     tts.paused = false;
     markReading(null);
@@ -1354,17 +1358,15 @@
     if (on && !synth) { toast('このブラウザは読み上げに対応していません'); return; }
     tts.mode = on;
     document.body.classList.toggle('read-mode', on);
-    ttsBtn.classList.toggle('on', on);
-    ttsBtn.setAttribute('aria-pressed', String(on));
     if (!on) stopTts();
     renderTtsBar();
   }
-  ttsBtn.addEventListener('click', () => setTtsMode(!tts.mode));
   ttsBar.addEventListener('click', e => {
     const b = e.target.closest('button[data-tts]');
     if (!b) return;
     const a = b.dataset.tts;
-    if (a === 'exit') setTtsMode(false);
+    if (a === 'start') setTtsMode(true);
+    else if (a === 'exit') setTtsMode(false);
     else if (a === 'stop') stopTts();
     else if (a === 'pause') {
       // 一時停止は「止めて位置を覚える」方式（pause() が効かないブラウザがあるため）
@@ -1401,6 +1403,7 @@
     if (dlg.open) return;
     if (tts.speaking || tts.paused) stopTts(); else renderTtsBar();
   }).observe(dlg, { attributes: true, attributeFilter: ['open'] });
+  if (synth) renderTtsBar();   // 読み上げに対応していないブラウザではボタンを出さない
 
   // ───────── キーボード操作 ─────────
   document.addEventListener('keydown', e => {
