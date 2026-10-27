@@ -76,6 +76,13 @@
   const view = $('#view');
   const dlg = $('#detail');
 
+  // 遠い場所へはすぐ移動し、近い場所へはなめらかに移動する
+  function scrollToEl(el, block) {
+    if (!el) return;
+    const far = Math.abs(el.getBoundingClientRect().top - innerHeight / 2) > innerHeight * 3;
+    el.scrollIntoView({ behavior: far ? 'auto' : 'smooth', block });
+  }
+
   function toast(msg) {
     const t = document.createElement('div');
     t.className = 'toast';
@@ -394,7 +401,23 @@
   });
 
   // ───────── 辞典 ─────────
-  const dict = { q: '', region: '', era: '', cat: '', fav: false, sort: 'year' };
+  const dict = { region: '', era: '', cat: '', fav: false, sort: 'kana' };
+  // 五十音の並べ替え用のよみ（日本の人物はよみがな、西洋はカタカナ名をひらがなにしたもの）
+  const KANA_OVERRIDE = {
+    'C・S・ルイス': 'しーえするいす', '教皇フランシスコ': 'きょうこうふらんしすこ', 'カール大帝': 'かーるたいてい',
+    'ジョン王': 'じょんおう', 'ヴィクトリア女王': 'ゔぃくとりあじょおう', 'キング牧師': 'きんぐぼくし',
+  };
+  const KANA_ROWS = [
+    ['あ', 'あいうえお'], ['か', 'かきくけこ'], ['さ', 'さしすせそ'], ['た', 'たちつてと'], ['な', 'なにぬねの'],
+    ['は', 'はひふへほ'], ['ま', 'まみむめも'], ['や', 'やゆよ'], ['ら', 'らりるれろ'], ['わ', 'わをん'],
+  ];
+  const SMALL = { ぁ: 'あ', ぃ: 'い', ぅ: 'う', ぇ: 'え', ぉ: 'お', っ: 'つ', ゃ: 'や', ゅ: 'ゆ', ょ: 'よ', ゎ: 'わ' };
+  PEOPLE.forEach(p => {
+    p.kana = (KANA_OVERRIDE[p.name] || (p.region === '日本' ? p.sub : toHira(p.name))).replace(/[・\s（）()「」＝=]/g, '');
+    const c0 = p.kana[0].normalize('NFD')[0];   // 濁点・半濁点を外す（が→か、ゔ→う）
+    const c = SMALL[c0] || c0;
+    p.row = (KANA_ROWS.find(([, s]) => s.includes(c)) || ['他'])[0];
+  });
   function todayPerson() {
     const n = Math.floor(Date.now() / 86400000);
     return PEOPLE[(n * 7919) % PEOPLE.length];
@@ -411,24 +434,28 @@
       </section>
 
       <section class="panel" id="dictf">
-        <input type="search" id="q" placeholder="この一覧を絞り込む（例：ルター、しんらん、十字軍）" value="${esc(dict.q)}" aria-label="検索">
-        <div class="row" style="margin-top:10px">
+        <h2>人名事典</h2>
+        <div class="row">
           <label class="f">地域<select name="region"><option value="">西洋と日本</option>${REGIONS.map(r => `<option${r === dict.region ? ' selected' : ''}>${r}</option>`).join('')}</select></label>
           <label class="f">時代<select name="era">${eraOptions(dict.region, dict.era)}</select></label>
           <label class="f">分野<select name="cat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === dict.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
           <label class="f">並び順<select name="sort">
-            <option value="year"${dict.sort === 'year' ? ' selected' : ''}>年代順</option>
             <option value="kana"${dict.sort === 'kana' ? ' selected' : ''}>五十音順</option>
+            <option value="year"${dict.sort === 'year' ? ' selected' : ''}>年代順</option>
             <option value="weak"${dict.sort === 'weak' ? ' selected' : ''}>苦手な順</option>
           </select></label>
           <label class="check"><input type="checkbox" name="fav"${dict.fav ? ' checked' : ''}> ★のみ</label>
         </div>
       </section>
+      <nav class="kana-idx" id="kanaIdx" aria-label="五十音の索引"></nav>
       <p class="count" id="count"></p>
-      <div class="grid" id="list"></div>`;
+      <div id="list"></div>`;
 
     const f = $('#dictf');
-    $('#q').addEventListener('input', e => { dict.q = e.target.value; updateList(); });
+    $('#kanaIdx').addEventListener('click', e => {
+      const b = e.target.closest('[data-row]');
+      if (b) $(`#kana-${b.dataset.row}`)?.scrollIntoView({ block: 'start' });
+    });
     $('[name="region"]', f).addEventListener('change', e => {
       dict.region = e.target.value; dict.era = '';
       $('[name="era"]', f).innerHTML = eraOptions(dict.region, '');
@@ -441,36 +468,51 @@
   function updateList() {
     const list = $('#list');
     if (!list) return;
-    const words = norm(dict.q).split(/\s+/).filter(Boolean);
-    let res = PEOPLE.filter(p =>
+    const res = PEOPLE.filter(p =>
       (!dict.region || p.region === dict.region) &&
       (!dict.era || p.era === dict.era) &&
       (!dict.cat || p.cat === dict.cat) &&
-      (!dict.fav || isFav(p.id)) &&
-      words.every(w => p.text.includes(w)));
+      (!dict.fav || isFav(p.id)));
     if (dict.sort === 'kana') {
-      const k = p => (p.region === '日本' ? p.sub : toHira(p.name));
-      res.sort((a, b) => k(a).localeCompare(k(b), 'ja'));
+      res.sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
     } else if (dict.sort === 'weak') {
       const score = p => { const r = S.prog[p.id]; return r ? (r.w - r.c) * 10 - r.b : -100; };
       res.sort((a, b) => score(b) - score(a) || a.y - b.y);
     } else {
       res.sort((a, b) => a.y - b.y);
     }
-    // 検索中は、名前・よみに一致した人物を先に並べる（解説文だけの一致は後ろへ）
-    if (words.length) {
-      const hit = p => (words.every(w => p.head.includes(w)) ? 0 : 1);
-      res = res.map((p, i) => ({ p, i })).sort((a, b) => hit(a.p) - hit(b.p) || a.i - b.i).map(x => x.p);
-    }
     $('#count').textContent = `${res.length}人 / 全${PEOPLE.length}人`;
-    list.innerHTML = res.length ? res.map(p => `
+    const card = p => `
       <button class="pcard ${p.rc}" data-open="${esc(p.id)}">
         ${isFav(p.id) ? '<span class="star">★</span>' : ''}
         <span class="nm">${esc(p.name)}</span>
         <span class="sb">${esc(p.sub)}</span>
         <span class="mt">${regionBadge(p)}<span class="badge">${esc(p.era)}</span><span>${esc(lifeOf(p))}</span></span>
         <span class="lv lv${level(p.id)}" title="${LEVELS[level(p.id)]}">${LEVELS[level(p.id)]}</span>
-      </button>`).join('') : '<p class="empty">該当する人物がいません。</p>';
+      </button>`;
+    const idx = $('#kanaIdx');
+    if (!res.length) {
+      idx.hidden = true;
+      list.innerHTML = '<p class="empty">該当する人物がいません。</p>';
+      return;
+    }
+    if (dict.sort !== 'kana') {
+      idx.hidden = true;
+      list.innerHTML = `<div class="grid">${res.map(card).join('')}</div>`;
+      return;
+    }
+    // 五十音順：行ごとの見出しと、押すとその行へ移動する索引
+    const rows = [...KANA_ROWS.map(([r]) => r), '他'];
+    const groups = rows.map(r => [r, res.filter(p => p.row === r)]).filter(([, ps]) => ps.length);
+    const has = new Set(groups.map(([r]) => r));
+    idx.hidden = false;
+    idx.innerHTML = rows.filter(r => r !== '他' || has.has(r))
+      .map(r => `<button data-row="${r}"${has.has(r) ? '' : ' disabled'}>${r}</button>`).join('');
+    list.innerHTML = groups.map(([r, ps]) => `
+      <section class="kana-sec">
+        <h3 class="kana-h" id="kana-${r}">${r === '他' ? 'その他' : `${r}行`}<small>${ps.length}人</small></h3>
+        <div class="grid">${ps.map(card).join('')}</div>
+      </section>`).join('');
   }
 
   // ───────── 年表 ─────────
@@ -1110,9 +1152,7 @@
     if (!el) return;
     $$('#tl .hit').forEach(x => x.classList.remove('hit'));
     el.classList.add('hit');
-    // 遠い場所へはすぐ移動し、近い場所へはなめらかに移動する
-    const far = Math.abs(el.getBoundingClientRect().top - innerHeight / 2) > innerHeight * 3;
-    el.scrollIntoView({ behavior: far ? 'auto' : 'smooth', block: 'center' });
+    scrollToEl(el, 'center');
   }
   function renderGsStep() {
     if (current !== 'timeline' || gsPos < 0 || !gsSeq.length) { gsStep.hidden = true; return; }
