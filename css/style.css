@@ -14,6 +14,8 @@
   --west-bg: #e3efff;
   --japan: #e8475f;
   --japan-bg: #ffe8ec;
+  --china: #d08a00;
+  --china-bg: #fff3d9;
   --sun: #ffb020;
   --sun-bg: #fff4d6;
   --ok: #17a673;
@@ -47,6 +49,8 @@
   --west-bg: #1e2c47;
   --japan: #ff8a9b;
   --japan-bg: #43222b;
+  --china: #f0b34a;
+  --china-bg: #3d3020;
   --sun: #ffc65a;
   --sun-bg: #3a3020;
   --ok: #4fd9a0;
@@ -264,16 +268,30 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
 .badges { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ───── timeline ───── */
-.tl { display: grid; grid-template-columns: 64px 1fr 1fr; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
-.tl > div { padding: 12px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
-.tl .h { position: sticky; top: 64px; z-index: 2; font-family: var(--round); font-weight: 700; font-size: 15px; text-align: center; background: var(--surface-2); }
+.tl {
+  --cols: 2;
+  display: grid; grid-template-columns: 64px repeat(var(--cols), minmax(0, 1fr)); gap: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: clip; box-shadow: var(--shadow);
+}
+.tl > div { padding: 7px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+.tl .h { position: sticky; top: 64px; z-index: 2; font-family: var(--round); font-weight: 700; font-size: 15px; text-align: center; background: var(--surface-2); padding: 10px; }
 .tl .h.west { color: #fff; background: var(--west); }
 .tl .h.japan { color: #fff; background: var(--japan); }
-.tl .c { font-family: var(--round); font-weight: 700; font-size: 20px; text-align: center; background: var(--surface-2); color: var(--brand); line-height: 1.2; }
-.tl .c small { display: block; font-size: 11px; color: var(--muted); }
-.tl .col { display: flex; flex-direction: column; gap: 8px; }
-.tl .col.west { border-right: 1px solid var(--line); }
+.tl .h.china { color: #fff; background: var(--china); }
+.tl .y { font-family: var(--round); font-weight: 700; font-size: 14px; text-align: right; background: var(--surface-2); color: var(--brand); scroll-margin-top: 112px; }
+.tl .col { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.tl .col:not(:last-child) { border-right: 1px solid var(--line); }
+.tl .col:empty { background: repeating-linear-gradient(0deg, transparent, transparent 3px, color-mix(in srgb, var(--line) 25%, transparent) 3px, color-mix(in srgb, var(--line) 25%, transparent) 4px); }
+.tl-ev { font-size: 13px; line-height: 1.5; padding-left: 10px; border-left: 3px solid var(--sun); }
+.tl .col.west .tl-ev { border-left-color: var(--west); }
+.tl .col.japan .tl-ev { border-left-color: var(--japan); }
+.tl .col.china .tl-ev { border-left-color: var(--china); }
+.tl-ev b { font-family: var(--round); font-size: 11px; margin-right: 6px; padding: 0 6px; border-radius: 5px; background: var(--sun-bg); color: #9a6200; }
 .tl .chip { font-size: 13px; }
+.chip .pt {
+  display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 5px; border-radius: 50%;
+  font-size: 10px; font-weight: 700; background: var(--surface); color: var(--muted); vertical-align: 1px;
+}
 
 /* ───── flashcards ───── */
 .progress { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 6px 0 14px; }
@@ -357,12 +375,15 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
   #nav { flex: 1; justify-content: space-between; }
   #nav a { flex: 1; text-align: center; padding: 6px 2px; font-size: 13px; }
   .two { grid-template-columns: 1fr; }
-  .tl { grid-template-columns: 40px 1fr 1fr; }
-  .tl > div { padding: 8px 6px; }
-  .tl .h { top: 104px; }
-  .tl .c { font-size: 16px; }
+  .tl { grid-template-columns: 42px repeat(var(--cols), minmax(0, 1fr)); }
+  .tl > div { padding: 6px 5px; }
+  .tl .h { top: 104px; font-size: 13px; padding: 8px 4px; }
+  .tl .y { font-size: 12px; scroll-margin-top: 148px; }
+  .tl-ev { font-size: 12px; padding-left: 6px; }
   .tl .chip { font-size: 12px; padding: 2px 8px; }
-  .tl .chip small { display: block; margin: 0; }
+  .tl .chip small { display: block; margin: 0; font-size: 10px; }
+  .tl .chip { width: 100%; border-radius: 8px; padding: 3px 5px; font-size: 11.5px; line-height: 1.35; }
+  .tl .chip .pt { display: none; }
   .ev { grid-template-columns: 1fr; gap: 0; font-size: 12px; }
   .ev b { justify-self: start; }
   .bar-row { grid-template-columns: 84px 1fr 44px; }

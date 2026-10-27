@@ -21,8 +21,9 @@
       y: p.born ?? (p.died != null ? p.died - 40 : p.fl),
     };
     q.from = p.born ?? (p.died != null ? p.died - 60 : p.fl - 30);
-    q.to = p.died ?? (p.born != null ? p.born + 60 : p.fl + 30);
-    q.detail = DETAILS[p.name] || '';
+    // 没年がなく生年だけある人物は存命として扱う
+    q.to = p.died ?? (p.born != null ? new Date().getFullYear() : p.fl + 30);
+    q.detail = DETAILS[p.name] || p.detail || '';
     q.head = norm([p.name, p.sub, ...q.alias].join(' '));
     q.text = norm([p.name, p.sub, ...q.alias, p.region, p.era, p.cat, p.desc, ...q.keys, q.detail].join(' '));
     q.rc = p.region === '西洋' ? 'west' : 'japan';
@@ -38,7 +39,7 @@
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const sample = (a, n) => shuffle([...a]).slice(0, n);
   const fy = y => (y < 0 ? `前${-y}` : String(y));
-  const lifeOf = p => p.life || `${p.born != null ? fy(p.born) : '?'}–${p.died != null ? fy(p.died) : '?'}`;
+  const lifeOf = p => p.life || (p.born != null && p.died == null ? `${fy(p.born)}–` : `${p.born != null ? fy(p.born) : '?'}–${p.died != null ? fy(p.died) : '?'}`);
   const centuryOf = y => Math.max(1, Math.floor((y - 1) / 100) + 1);
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const view = $('#view');
@@ -212,7 +213,7 @@
   const personChip = (p, withLife = true) =>
     `<button class="chip ${p.rc}" data-open="${esc(p.id)}">${esc(p.name)}${withLife ? `<small>${esc(lifeOf(p))}</small>` : ''}</button>`;
 
-  const evItem = e => `<li class="ev ${e.r === '西洋' ? 'west' : 'japan'}"><b>${esc(e.l || fy(e.y))}</b><span>${esc(e.t)}</span></li>`;
+  const evItem = e => `<li class="ev ${({ 西洋: 'west', 日本: 'japan', 中国: 'china' })[e.r]}"><b>${esc(e.l || fy(e.y))}</b><span>${esc(e.t)}</span></li>`;
 
   // ───────── 詳細ダイアログ ─────────
   function contemporaries(p, region, n) {
@@ -366,43 +367,71 @@
   }
 
   // ───────── 年表 ─────────
-  const tl = { cat: '', ev: true, ps: true };
+  // 年ごとに1行。出来事はその年、人物は生まれた年（不明なら没年・活躍年）の行に置く
+  const tl = { cat: '', ev: true, ps: true, cn: false };
+  const TL_COLS = { 西洋: 'west', 日本: 'japan', 中国: 'china' };
   function renderTimeline() {
     view.innerHTML = `
       <section class="panel">
-        <h2>西洋と日本の比較年表</h2>
-        <p class="lead">世紀ごとに、西洋と日本の大きな出来事と、その世紀に生まれた人物を並べています。「同じころ、向こうでは何が？」をつかむのに使ってください。</p>
+        <h2>比較年表</h2>
+        <p class="lead">年代順に、大きな出来事と人物（生まれた年）を地域ごとに並べています。「同じころ、ほかの地域では何が？」をつかむのに使ってください。</p>
         <div class="row">
-          <label class="f" style="max-width:240px">人物の分野<select id="tlcat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === tl.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
+          <label class="f" style="max-width:220px">人物の分野<select id="tlcat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === tl.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
+          <label class="f" style="max-width:180px">年代へ移動<select id="tljump"></select></label>
+        </div>
+        <div class="row" style="margin-top:6px">
           <label class="check"><input type="checkbox" id="tlev"${tl.ev ? ' checked' : ''}> 出来事</label>
-          <label class="check"><input type="checkbox" id="tlps"${tl.ps ? ' checked' : ''}> 人物</label>
+          <label class="check"><input type="checkbox" id="tlps"${tl.ps ? ' checked' : ''}> 人物（生年）</label>
+          <label class="check"><input type="checkbox" id="tlcn"${tl.cn ? ' checked' : ''}> 中国の年表も表示</label>
         </div>
       </section>
       <div class="tl" id="tl"></div>`;
     $('#tlcat').addEventListener('change', e => { tl.cat = e.target.value; drawTimeline(); });
     $('#tlev').addEventListener('change', e => { tl.ev = e.target.checked; drawTimeline(); });
     $('#tlps').addEventListener('change', e => { tl.ps = e.target.checked; drawTimeline(); });
+    $('#tlcn').addEventListener('change', e => { tl.cn = e.target.checked; drawTimeline(); });
+    $('#tljump').addEventListener('change', e => {
+      const row = $(`#tl [data-c="${e.target.value}"]`);
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     drawTimeline();
   }
+  // 人物を年表のどの年に置くか
+  function tlYear(p) {
+    if (p.born != null) return { y: p.born, mark: '生' };
+    if (p.died != null) return { y: p.died, mark: '没' };
+    return { y: p.fl, mark: '頃' };
+  }
   function drawTimeline() {
-    const ps = tl.ps ? PEOPLE.filter(p => !tl.cat || p.cat === tl.cat).sort((a, b) => a.y - b.y) : [];
-    const evs = tl.ev ? EVENTS : [];
-    const cs = [...ps.map(p => centuryOf(p.y)), ...evs.map(e => centuryOf(e.y))];
-    let html = '<div class="h">世紀</div><div class="h west">西洋</div><div class="h japan">日本</div>';
-    if (cs.length) {
-      for (let c = Math.min(...cs); c <= Math.max(...cs); c++) {
-        const col = r => {
-          const ev = evs.filter(e => e.r === r && centuryOf(e.y) === c);
-          const pp = ps.filter(p => p.region === r && centuryOf(p.y) === c);
-          return (ev.length ? `<ul class="evlist">${ev.map(evItem).join('')}</ul>` : '') +
-            (pp.length ? `<div class="chips">${pp.map(p => personChip(p)).join('')}</div>` : '');
-        };
-        html += `<div class="c">${c}<small>世紀</small></div><div class="col west">${col('西洋')}</div><div class="col japan">${col('日本')}</div>`;
-      }
-    } else {
-      html += '<div class="c"></div><div class="col west"><p class="lead">表示する項目を選んでください。</p></div><div class="col japan"></div>';
+    const regions = tl.cn ? ['西洋', '日本', '中国'] : ['西洋', '日本'];
+    const rows = new Map();   // 年 → { 西洋: [], 日本: [], 中国: [] }
+    const cell = y => { if (!rows.has(y)) rows.set(y, { 西洋: [], 日本: [], 中国: [] }); return rows.get(y); };
+    if (tl.ev) {
+      EVENTS.filter(e => regions.includes(e.r)).forEach(e => {
+        cell(e.y)[e.r].push(`<div class="tl-ev">${e.l ? `<b>${esc(e.l)}</b>` : ''}${esc(e.t)}</div>`);
+      });
     }
-    $('#tl').innerHTML = html;
+    if (tl.ps) {
+      PEOPLE.filter(p => !tl.cat || p.cat === tl.cat).forEach(p => {
+        const { y, mark } = tlYear(p);
+        cell(y)[p.region].push(`<button class="chip ${p.rc}" data-open="${esc(p.id)}"><span class="pt">${mark}</span>${esc(p.name)}<small>${esc(lifeOf(p))}</small></button>`);
+      });
+    }
+    const years = [...rows.keys()].sort((a, b) => a - b);
+    const el = $('#tl');
+    el.style.setProperty('--cols', regions.length);
+    let html = `<div class="h">年</div>${regions.map(r => `<div class="h ${TL_COLS[r]}">${r}</div>`).join('')}`;
+    const seen = new Set();
+    for (const y of years) {
+      const c = centuryOf(y);
+      const anchor = seen.has(c) ? '' : ` data-c="${c}"`;
+      seen.add(c);
+      const r = rows.get(y);
+      html += `<div class="y"${anchor}>${fy(y)}</div>${regions.map(g => `<div class="col ${TL_COLS[g]}">${r[g].join('')}</div>`).join('')}`;
+    }
+    if (!years.length) html += `<div class="y"></div><div class="col" style="grid-column: span ${regions.length}"><p class="lead">表示する項目を選んでください。</p></div>`;
+    el.innerHTML = html;
+    $('#tljump').innerHTML = `<option value="">選んでください</option>${[...seen].map(c => `<option value="${c}">${c}世紀</option>`).join('')}`;
   }
 
   // ───────── フラッシュカード ─────────
