@@ -70,6 +70,9 @@
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const sample = (a, n) => shuffle([...a]).slice(0, n);
   const fy = y => (y < 0 ? `前${-y}` : String(y));
+  // 明治以降の和暦。改元の年は両方を返す（1912 → ['明治45', '大正元']）
+  const WAREKI = [['明治', 1868, 1912], ['大正', 1912, 1926], ['昭和', 1926, 1989], ['平成', 1989, 2019], ['令和', 2019, Infinity]];
+  const wareki = y => WAREKI.filter(([, s, e]) => s <= y && y <= e).map(([n, s]) => `${n}${y === s ? '元' : y - s + 1}`);
   const lifeOf = p => p.life || (p.born != null && p.died == null ? `${fy(p.born)}–` : `${p.born != null ? fy(p.born) : '?'}–${p.died != null ? fy(p.died) : '?'}`);
   const centuryOf = y => Math.max(1, Math.floor((y - 1) / 100) + 1);
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -346,7 +349,8 @@
       .filter(p => p.region === e.r && !named.includes(p) && p.from <= e.y && e.y <= p.to)
       .sort((a, b) => a.y - b.y)
       .slice(0, 12);
-    const when = e.l ? e.l.replace(/^(\d+)頃$/, '$1年頃') : `${fy(e.y)}年`;
+    const wk = wareki(e.y);
+    const when = (e.l ? e.l.replace(/^(\d+)頃$/, '$1年頃') : `${fy(e.y)}年`) + (wk.length ? `（${wk.map(w => `${w}年`).join('／')}）` : '');
     dlg.innerHTML = `
       <article class="detail ev-detail">
         ${backBtn()}
@@ -576,7 +580,9 @@
       const anchor = seen.has(c) ? '' : ` data-c="${c}"`;
       seen.add(c);
       const r = rows.get(y);
-      html += `<div class="y"${anchor}>${fy(y)}</div>${regions.map(g => `<div class="col ${TL_COLS[g]}">${r[g].join('')}</div>`).join('')}`;
+      const wk = wareki(y);
+      const yLabel = `${fy(y)}${wk.length ? `<small class="wk">${wk.map(w => `<span>${w}</span>`).join('')}</small>` : ''}`;
+      html += `<div class="y"${anchor}>${yLabel}</div>${regions.map(g => `<div class="col ${TL_COLS[g]}">${r[g].join('')}</div>`).join('')}`;
     }
     if (!years.length) html += `<div class="y"></div><div class="col" style="grid-column: span ${regions.length}"><p class="lead">表示する項目を選んでください。</p></div>`;
     el.innerHTML = html;

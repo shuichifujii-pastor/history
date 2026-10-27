@@ -354,6 +354,8 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
 .tl .h.japan { color: #fff; background: var(--japan); }
 .tl .h.china { color: #fff; background: var(--china); }
 .tl .y { font-family: var(--round); font-weight: 700; font-size: 14px; text-align: right; background: var(--surface-2); color: var(--brand); scroll-margin-top: calc(var(--hdr, 64px) + 48px); }
+.tl .y .wk { display: block; margin-top: 2px; font-family: var(--sans); font-weight: 600; font-size: 11px; line-height: 1.35; color: var(--japan); }
+.tl .y .wk span { display: block; white-space: nowrap; }
 .tl .col { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .tl .col:not(:last-child) { border-right: 1px solid var(--line); }
 .tl .col:empty { background: repeating-linear-gradient(0deg, transparent, transparent 3px, color-mix(in srgb, var(--line) 25%, transparent) 3px, color-mix(in srgb, var(--line) 25%, transparent) 4px); }
@@ -462,7 +464,8 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
   #nav { flex: 1; justify-content: space-between; }
   #nav a { flex: 1; text-align: center; padding: 6px 2px; font-size: 13px; }
   .two { grid-template-columns: 1fr; }
-  .tl { grid-template-columns: 42px repeat(var(--cols), minmax(0, 1fr)); }
+  .tl { grid-template-columns: 50px repeat(var(--cols), minmax(0, 1fr)); }
+  .tl .y .wk { font-size: 10px; letter-spacing: -.02em; }
   .tl > div { padding: 6px 5px; }
   .tl .h { font-size: 13px; padding: 8px 4px; }
   .tl .y { font-size: 12px; }
