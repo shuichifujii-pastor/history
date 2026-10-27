@@ -411,7 +411,7 @@
       </section>
 
       <section class="panel" id="dictf">
-        <input type="search" id="q" placeholder="人名・よみ・キーワードで検索（例：ルター、しんらん、十字軍）" value="${esc(dict.q)}" aria-label="検索">
+        <input type="search" id="q" placeholder="この一覧を絞り込む（例：ルター、しんらん、十字軍）" value="${esc(dict.q)}" aria-label="検索">
         <div class="row" style="margin-top:10px">
           <label class="f">地域<select name="region"><option value="">西洋と日本</option>${REGIONS.map(r => `<option${r === dict.region ? ' selected' : ''}>${r}</option>`).join('')}</select></label>
           <label class="f">時代<select name="era">${eraOptions(dict.region, dict.era)}</select></label>
@@ -539,6 +539,7 @@
     if (!years.length) html += `<div class="y"></div><div class="col" style="grid-column: span ${regions.length}"><p class="lead">表示する項目を選んでください。</p></div>`;
     el.innerHTML = html;
     $('#tljump').innerHTML = `<option value="">選んでください</option>${[...seen].map(c => `<option value="${c}">${c}世紀</option>`).join('')}`;
+    markTlMatches();
   }
 
   // ───────── フラッシュカード ─────────
@@ -996,6 +997,214 @@
     },
   };
 
+  // ───────── 全文検索（画面上部。どのページからでも使える） ─────────
+  // 人物：名前・よみ・別名・要約・キーワード・解説　／　出来事：題名・解説・背景とその後
+  // 年表のページでは、結果を押すと年表上の位置へ移動し、「前へ／次へ」で年代順にたどれる。
+  EVENTS.forEach(e => {
+    e.head = norm(e.t);
+    e.text = norm([e.t, e.l || '', e.r, e.d, e.more].join(' '));
+  });
+  const gq = $('#gq');
+  const gsPanel = $('#gsPanel');
+  const gsStep = $('#gsStep');
+  let gs = { q: '', words: [], people: [], events: [] };
+  let gsAll = false;      // 「すべて表示」
+  let gsSeq = [];         // 年表でたどる順（年代順）
+  let gsPos = -1;
+
+  function searchAll(q) {
+    const words = norm(q).split(/\s+/).filter(Boolean);
+    if (!words.length) return { q, words, people: [], events: [] };
+    const nameHit = h => (words.every(w => h.includes(w)) ? 0 : 1);
+    const people = PEOPLE.filter(p => words.every(w => p.text.includes(w)))
+      .sort((a, b) => nameHit(a.head) - nameHit(b.head) || a.y - b.y);
+    const events = EVENTS.filter(e => words.every(w => e.text.includes(w)))
+      .sort((a, b) => nameHit(a.head) - nameHit(b.head) || a.y - b.y);
+    return { q, words, people, events };
+  }
+  // 一致した語に印を付ける（正規化で長さが変わる文字列は印なし）
+  function hl(raw, words) {
+    const n = norm(raw);
+    if (n.length !== raw.length) return esc(raw);
+    const on = new Array(raw.length).fill(false);
+    words.forEach(w => {
+      for (let k = n.indexOf(w); k >= 0; k = n.indexOf(w, k + 1)) for (let j = k; j < k + w.length; j++) on[j] = true;
+    });
+    let out = '';
+    for (let j = 0; j < raw.length; j++) {
+      if (on[j] && !on[j - 1]) out += '<mark>';
+      out += esc(raw[j]);
+      if (on[j] && !on[j + 1]) out += '</mark>';
+    }
+    return out;
+  }
+  // 一致した箇所の前後を切り出す
+  function snip(fields, words, len = 76) {
+    const raw = fields.find(f => f && words.some(w => norm(f).includes(w))) || fields.find(Boolean) || '';
+    const n = norm(raw);
+    const idx = words.map(w => n.indexOf(w)).filter(x => x >= 0);
+    const i = idx.length ? Math.min(...idx) : 0;
+    const start = Math.max(0, i - 22);
+    const end = Math.min(raw.length, start + len);
+    return `${start > 0 ? '…' : ''}${hl(raw.slice(start, end), words)}${end < raw.length ? '…' : ''}`;
+  }
+
+  function renderGsPanel() {
+    const { words, people, events } = gs;
+    if (!words.length) { gsPanel.hidden = true; return; }
+    const onTl = current === 'timeline';
+    const lim = gsAll ? Infinity : 8;
+    const pItem = p => `
+      <button class="gs-item" data-gs="p:${esc(p.id)}">
+        <span class="gs-t">${hl(p.name, words)}<small>${esc(lifeOf(p))}</small>${regionBadge(p)}</span>
+        <span class="gs-s">${snip([p.desc, p.keys.join('・'), p.detail, p.sub, p.alias.join('、')], words)}</span>
+      </button>`;
+    const eItem = e => `
+      <button class="gs-item" data-gs="e:${esc(e.key)}">
+        <span class="gs-t"><b class="gs-yr">${esc(e.l || fy(e.y))}</b>${hl(e.t, words)}<span class="badge ${RC[e.r]}">${e.r}</span></span>
+        <span class="gs-s">${snip([e.d, e.more], words)}</span>
+      </button>`;
+    const more = !gsAll && (people.length > lim || events.length > lim);
+    gsPanel.innerHTML = `
+      <div class="gs-head">
+        <span>人物 <b>${people.length}</b>件・出来事 <b>${events.length}</b>件</span>
+        <span class="gs-hint">${onTl ? '押すと年表上の場所へ移動します（Enterで最初の場所へ）' : '押すと詳細が開きます'}</span>
+      </div>
+      ${people.length ? `<div class="gs-group">人物</div>${people.slice(0, lim).map(pItem).join('')}` : ''}
+      ${events.length ? `<div class="gs-group">出来事</div>${events.slice(0, lim).map(eItem).join('')}` : ''}
+      ${!people.length && !events.length ? '<p class="gs-empty">見つかりませんでした。言葉を短くしたり、ひらがなで入力したりしてみてください。</p>' : ''}
+      ${more ? '<button class="gs-more" data-gsmore>すべての結果を表示</button>' : ''}`;
+    gsPanel.hidden = false;
+  }
+  const closeGsPanel = () => { gsPanel.hidden = true; };
+
+  // 年表上でたどる順番（人物は年表に置かれている年）
+  function buildSeq() {
+    return [
+      ...gs.people.map(p => ({ kind: 'p', key: p.id, y: tlYear(p).y })),
+      ...gs.events.map(e => ({ kind: 'e', key: e.key, y: e.y })),
+    ].sort((a, b) => a.y - b.y || (a.kind === 'e' ? -1 : 1));
+  }
+  const tlSel = it => (it.kind === 'p' ? `#tl [data-open="${CSS.escape(it.key)}"]` : `#tl [data-ev="${CSS.escape(it.key)}"]`);
+  // 年表の中で一致した項目すべてに印を付ける
+  function markTlMatches() {
+    $$('#tl .match').forEach(x => x.classList.remove('match'));
+    if (current !== 'timeline' || !gs.words.length) return;
+    buildSeq().forEach(it => $(tlSel(it))?.classList.add('match'));
+  }
+  // 年表上の位置へ移動（非表示の項目なら表示条件を戻してから）
+  function jumpTl(it) {
+    if (!it) return;
+    let changed = false;
+    if (it.kind === 'p') {
+      const p = BY_ID.get(it.key);
+      if (!tl.ps) { tl.ps = true; changed = true; }
+      if (tl.cat && p.cat !== tl.cat) { tl.cat = ''; changed = true; }
+    } else {
+      const e = EV_BY_KEY.get(it.key);
+      if (!tl.ev) { tl.ev = true; changed = true; }
+      if (e.r === '中国' && !tl.cn) { tl.cn = true; changed = true; }
+    }
+    if (changed) renderTimeline();
+    const el = $(tlSel(it));
+    if (!el) return;
+    $$('#tl .hit').forEach(x => x.classList.remove('hit'));
+    el.classList.add('hit');
+    // 遠い場所へはすぐ移動し、近い場所へはなめらかに移動する
+    const far = Math.abs(el.getBoundingClientRect().top - innerHeight / 2) > innerHeight * 3;
+    el.scrollIntoView({ behavior: far ? 'auto' : 'smooth', block: 'center' });
+  }
+  function renderGsStep() {
+    if (current !== 'timeline' || gsPos < 0 || !gsSeq.length) { gsStep.hidden = true; return; }
+    gsStep.innerHTML = `
+      <span class="gs-step-q">「${esc(gs.q)}」</span>
+      <span class="gs-step-n">${gsPos + 1} / ${gsSeq.length}</span>
+      <button data-step="-1" aria-label="前の該当箇所">◀ 前へ</button>
+      <button data-step="1" aria-label="次の該当箇所">次へ ▶</button>
+      <button data-step="x" aria-label="検索を終える">×</button>`;
+    gsStep.hidden = false;
+  }
+  function gsGo(pos) {
+    gsPos = (pos + gsSeq.length) % gsSeq.length;
+    jumpTl(gsSeq[gsPos]);
+    renderGsStep();
+  }
+  function activateGs(token) {
+    const kind = token[0];
+    const key = token.slice(2);
+    closeGsPanel();
+    gq.blur();
+    if (current === 'timeline') {
+      gsSeq = buildSeq();
+      gsGo(Math.max(0, gsSeq.findIndex(x => x.kind === kind && x.key === key)));
+    } else if (kind === 'p') openDetail(key);
+    else openEvent(key);
+  }
+  function clearGs() {
+    gq.value = '';
+    gs = searchAll('');
+    gsSeq = [];
+    gsPos = -1;
+    closeGsPanel();
+    renderGsStep();
+    markTlMatches();
+    $$('#tl .hit').forEach(x => x.classList.remove('hit'));
+  }
+
+  gq.addEventListener('input', () => {
+    gs = searchAll(gq.value);
+    gsAll = false;
+    gsSeq = [];
+    gsPos = -1;
+    renderGsStep();
+    renderGsPanel();
+    markTlMatches();
+  });
+  gq.addEventListener('focus', () => { if (gs.words.length) renderGsPanel(); });
+  gq.addEventListener('keydown', e => {
+    const items = $$('.gs-item', gsPanel);
+    const cur = items.findIndex(x => x.classList.contains('sel'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!items.length) return;
+      const next = e.key === 'ArrowDown' ? (cur + 1) % items.length : (cur - 1 + items.length) % items.length;
+      items.forEach(x => x.classList.remove('sel'));
+      items[next].classList.add('sel');
+      items[next].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (cur >= 0) activateGs(items[cur].dataset.gs);
+      else if (current === 'timeline' && gs.words.length) {
+        gsSeq = buildSeq();
+        if (gsSeq.length) { closeGsPanel(); gq.blur(); gsGo(0); }
+      } else if (items.length) activateGs(items[0].dataset.gs);
+    } else if (e.key === 'Escape') {
+      closeGsPanel();
+      gq.blur();
+    }
+  });
+  gsPanel.addEventListener('click', e => {
+    if (e.target.closest('[data-gsmore]')) { gsAll = true; renderGsPanel(); gq.focus(); return; }
+    const it = e.target.closest('[data-gs]');
+    if (it) activateGs(it.dataset.gs);
+  });
+  gsStep.addEventListener('click', e => {
+    const b = e.target.closest('[data-step]');
+    if (!b) return;
+    if (b.dataset.step === 'x') clearGs();
+    else gsGo(gsPos + Number(b.dataset.step));
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#gsearch')) closeGsPanel(); });
+  // 「/」キーで検索欄へ
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !dlg.open && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); gq.focus(); gq.select(); }
+  });
+  // 画面上部の高さ（年表の見出しの固定位置などに使う）
+  const topBar = $('.top');
+  const setTopH = () => document.documentElement.style.setProperty('--hdr', `${topBar.offsetHeight}px`);
+  new ResizeObserver(setTopH).observe(topBar);
+  setTopH();
+
   // ───────── キーボード操作 ─────────
   document.addEventListener('keydown', e => {
     if (dlg.open || e.target.closest?.('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1028,6 +1237,9 @@
     current = ROUTES[r] ? r : 'dict';
     $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.r === current));
     if (dlg.open) dlg.close();
+    closeGsPanel();
+    gsPos = -1;
+    renderGsStep();
     ROUTES[current]();
     window.scrollTo(0, 0);
   }
