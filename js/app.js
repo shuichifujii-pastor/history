@@ -34,11 +34,13 @@
 
   // 出来事は「地域:年」で識別する。解説と関連は event-details.js
   const EV_DETAILS = window.HISTORY_EVENT_DETAILS || {};
+  const EV_MORE = window.HISTORY_EVENT_MORE || {};   // 背景とその後（event-more-*.js）
   const RC = { 西洋: 'west', 日本: 'japan', 中国: 'china' };
   EVENTS.forEach(e => {
     e.key = `${e.r}:${e.y}`;
     const x = EV_DETAILS[e.key] || {};
     e.d = x.d || '';
+    e.more = EV_MORE[e.key] || '';
     e.see = x.see || [];
     e.ppl = x.ppl || [];
   });
@@ -47,8 +49,11 @@
   const NAME_INDEX = PEOPLE
     .flatMap(p => [p.name, ...p.alias].filter(n => n.length >= 2).map(n => ({ n, p })))
     .sort((a, b) => b.n.length - a.n.length);
+  // 辞典の人物名を含むが別人を指す語（先に消しておく）
+  const NOT_NAMES = ['後白河'];
   function peopleIn(text) {
     let t = text;
+    NOT_NAMES.forEach(w => { t = t.split(w).join('\u0000'); });
     const found = [];
     for (const { n, p } of NAME_INDEX) {
       if (!t.includes(n)) continue;
@@ -317,7 +322,7 @@
     const e = EV_BY_KEY.get(key);
     if (!e) return;
     navDlg('e', key, isBack);
-    const named = [...new Set([...e.ppl.map(n => BY_ID.get(n)).filter(Boolean), ...peopleIn(`${e.t} ${e.d}`)])].sort((a, b) => a.y - b.y);
+    const named = [...new Set([...e.ppl.map(n => BY_ID.get(n)).filter(Boolean), ...peopleIn(`${e.t} ${e.d} ${e.more}`)])].sort((a, b) => a.y - b.y);
     const see = e.see.map(k => EV_BY_KEY.get(k)).filter(Boolean).sort((a, b) => a.y - b.y);
     const sameRegion = EVENTS.filter(x => x.r === e.r);
     const i = sameRegion.indexOf(e);
@@ -343,6 +348,7 @@
         <p class="life">${esc(when)}</p>
         <h2>${esc(e.t)}</h2>
         ${e.d ? `<h3>くわしい解説</h3><p class="detail-text">${esc(e.d)}</p>` : ''}
+        ${e.more ? `<h3>背景とその後</h3><p class="detail-text">${esc(e.more)}</p>` : ''}
         ${named.length ? `<h3>関係する人物</h3><div class="chips">${named.map(p => personChip(p)).join('')}</div>` : ''}
         ${see.length ? `<h3>つながりのある出来事</h3>${evList(see, true)}` : ''}
         <h3>${e.r}の前後の流れ</h3>
