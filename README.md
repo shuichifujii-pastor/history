@@ -94,6 +94,9 @@ python -m http.server 8765
 - 詳しい解説は [`js/details-west.js`](js/details-west.js)・[`js/details-japan.js`](js/details-japan.js) に、`"人名": "解説文",` の形で書きます。
 - 年表の出来事は [`js/events.js`](js/events.js) に `{ y: 1517, r: "西洋", t: "出来事" },` の形で書き足せます。
 
+ファイルを更新して公開するときは、`index.html` の `?v=4` などの版数を1つ上げてください。
+ブラウザが古いファイルを使い続けるのを防げます。
+
 ## ファイル構成
 
 ```

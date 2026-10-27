@@ -28,7 +28,7 @@ const serialize = s => { const { pref, ...rest } = s; return JSON.stringify(rest
 async function start() {
   const config = window.FIREBASE_CONFIG;
   if (!config || !config.apiKey) return set({ state: 'unconfigured' });
-  if (!app) return;
+  if (!app) return set({ state: 'error', error: 'ページの読み込みが不完全です。ページを再読み込みしてください。' });
 
   const [{ initializeApp }, A, F] = await Promise.all([
     import(SDK + 'firebase-app.js'),
