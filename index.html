@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>歴史人名辞典</title>
   <meta name="description" content="紀元後の西洋史・日本史の人物を調べて、カードとクイズで覚える学習用の人名辞典">
-  <meta name="theme-color" content="#7a3b2e">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%237a3b2e'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='serif'%3E史%3C/text%3E%3C/svg%3E">
+  <meta name="theme-color" content="#6a5cff">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236a5cff'/%3E%3Cstop offset='1' stop-color='%23e8475f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E史%3C/text%3E%3C/svg%3E">
+  <script>
+    try { if (localStorage.getItem('jinmei-theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -21,13 +24,16 @@
         <span class="brand-sub">西洋史・日本史（紀元後）</span>
       </span>
     </a>
-    <nav id="nav" aria-label="メインメニュー">
-      <a href="#/dict" data-r="dict">辞典</a>
-      <a href="#/timeline" data-r="timeline">年表</a>
-      <a href="#/cards" data-r="cards">カード</a>
-      <a href="#/quiz" data-r="quiz">クイズ</a>
-      <a href="#/stats" data-r="stats">記録</a>
-    </nav>
+    <div class="navwrap">
+      <nav id="nav" aria-label="メインメニュー">
+        <a href="#/dict" data-r="dict">辞典</a>
+        <a href="#/timeline" data-r="timeline">年表</a>
+        <a href="#/cards" data-r="cards">カード</a>
+        <a href="#/quiz" data-r="quiz">クイズ</a>
+        <a href="#/stats" data-r="stats">記録</a>
+      </nav>
+      <button class="theme-btn" id="themeBtn" aria-label="明るい表示と暗い表示を切り替える" title="表示の明るさを切り替え">🌙</button>
+    </div>
   </header>
 
   <main id="view"></main>
@@ -39,6 +45,9 @@
   </footer>
 
   <script src="js/data.js"></script>
+  <script src="js/details-west.js"></script>
+  <script src="js/details-japan.js"></script>
+  <script src="js/events.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

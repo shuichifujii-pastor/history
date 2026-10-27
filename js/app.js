@@ -3,6 +3,8 @@
 
   // ───────── データ準備 ─────────
   const DATA = window.HISTORY_DATA;
+  const DETAILS = window.HISTORY_DETAILS || {};
+  const EVENTS = (window.HISTORY_EVENTS || []).slice().sort((a, b) => a.y - b.y);
   const REGIONS = ['西洋', '日本'];
   const ERAS = DATA.eras;
   const CATS = DATA.categories;
@@ -20,7 +22,9 @@
     };
     q.from = p.born ?? (p.died != null ? p.died - 60 : p.fl - 30);
     q.to = p.died ?? (p.born != null ? p.born + 60 : p.fl + 30);
-    q.text = norm([p.name, p.sub, ...q.alias, p.region, p.era, p.cat, p.desc, ...q.keys].join(' '));
+    q.detail = DETAILS[p.name] || '';
+    q.head = norm([p.name, p.sub, ...q.alias].join(' '));
+    q.text = norm([p.name, p.sub, ...q.alias, p.region, p.era, p.cat, p.desc, ...q.keys, q.detail].join(' '));
     q.rc = p.region === '西洋' ? 'west' : 'japan';
     q.eraIdx = ERAS[p.region].indexOf(p.era);
     return q;
@@ -161,6 +165,8 @@
   const personChip = (p, withLife = true) =>
     `<button class="chip ${p.rc}" data-open="${esc(p.id)}">${esc(p.name)}${withLife ? `<small>${esc(lifeOf(p))}</small>` : ''}</button>`;
 
+  const evItem = e => `<li class="ev ${e.r === '西洋' ? 'west' : 'japan'}"><b>${esc(e.l || fy(e.y))}</b><span>${esc(e.t)}</span></li>`;
+
   // ───────── 詳細ダイアログ ─────────
   function contemporaries(p, region, n) {
     return PEOPLE
@@ -176,6 +182,7 @@
     const other = p.region === '西洋' ? '日本' : '西洋';
     const peersOther = contemporaries(p, other, 8);
     const peersSame = contemporaries(p, p.region, 8);
+    const lifeEvents = EVENTS.filter(e => e.r === p.region && e.y >= (p.born ?? p.from) && e.y <= p.to);
     dlg.innerHTML = `
       <article class="detail">
         <button class="close" data-close aria-label="閉じる">×</button>
@@ -183,8 +190,10 @@
         <h2>${esc(p.name)}</h2>
         <p class="sub">${esc(p.sub)}${p.alias.length ? `　別名：${p.alias.map(esc).join('、')}` : ''}</p>
         <p class="life">${esc(lifeOf(p))}</p>
-        <p class="desc">${esc(p.desc)}</p>
+        <p class="desc lead-desc">${esc(p.desc)}</p>
         <div class="chips">${p.keys.map(k => `<span class="chip">${esc(k)}</span>`).join('')}</div>
+        ${p.detail ? `<h3>くわしい解説</h3><p class="detail-text">${esc(p.detail)}</p>` : ''}
+        ${lifeEvents.length ? `<h3>生きた時代の${p.region}の出来事</h3><ul class="evlist">${lifeEvents.map(evItem).join('')}</ul>` : ''}
 
         <h3>学習状況</h3>
         <div class="learn">
@@ -290,6 +299,11 @@
     } else {
       res.sort((a, b) => a.y - b.y);
     }
+    // 検索中は、名前・よみに一致した人物を先に並べる（解説文だけの一致は後ろへ）
+    if (words.length) {
+      const hit = p => (words.every(w => p.head.includes(w)) ? 0 : 1);
+      res = res.map((p, i) => ({ p, i })).sort((a, b) => hit(a.p) - hit(b.p) || a.i - b.i).map(x => x.p);
+    }
     $('#count').textContent = `${res.length}人 / 全${PEOPLE.length}人`;
     list.innerHTML = res.length ? res.map(p => `
       <button class="pcard ${p.rc}" data-open="${esc(p.id)}">
@@ -302,30 +316,41 @@
   }
 
   // ───────── 年表 ─────────
-  const tl = { cat: '' };
+  const tl = { cat: '', ev: true, ps: true };
   function renderTimeline() {
     view.innerHTML = `
       <section class="panel">
         <h2>西洋と日本の比較年表</h2>
-        <p class="lead">生まれた世紀ごとに、西洋と日本の人物を並べています。「同じころ、向こうでは誰が？」をつかむのに使ってください。</p>
-        <div class="row"><label class="f" style="max-width:240px">分野<select id="tlcat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === tl.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label></div>
+        <p class="lead">世紀ごとに、西洋と日本の大きな出来事と、その世紀に生まれた人物を並べています。「同じころ、向こうでは何が？」をつかむのに使ってください。</p>
+        <div class="row">
+          <label class="f" style="max-width:240px">人物の分野<select id="tlcat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === tl.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
+          <label class="check"><input type="checkbox" id="tlev"${tl.ev ? ' checked' : ''}> 出来事</label>
+          <label class="check"><input type="checkbox" id="tlps"${tl.ps ? ' checked' : ''}> 人物</label>
+        </div>
       </section>
       <div class="tl" id="tl"></div>`;
     $('#tlcat').addEventListener('change', e => { tl.cat = e.target.value; drawTimeline(); });
+    $('#tlev').addEventListener('change', e => { tl.ev = e.target.checked; drawTimeline(); });
+    $('#tlps').addEventListener('change', e => { tl.ps = e.target.checked; drawTimeline(); });
     drawTimeline();
   }
   function drawTimeline() {
-    const ps = PEOPLE.filter(p => !tl.cat || p.cat === tl.cat).sort((a, b) => a.y - b.y);
-    const groups = new Map();
-    ps.forEach(p => { const c = centuryOf(p.y); if (!groups.has(c)) groups.set(c, []); groups.get(c).push(p); });
-    const cs = [...groups.keys()];
+    const ps = tl.ps ? PEOPLE.filter(p => !tl.cat || p.cat === tl.cat).sort((a, b) => a.y - b.y) : [];
+    const evs = tl.ev ? EVENTS : [];
+    const cs = [...ps.map(p => centuryOf(p.y)), ...evs.map(e => centuryOf(e.y))];
     let html = '<div class="h">世紀</div><div class="h west">西洋</div><div class="h japan">日本</div>';
     if (cs.length) {
       for (let c = Math.min(...cs); c <= Math.max(...cs); c++) {
-        const g = groups.get(c) || [];
-        const col = r => g.filter(p => p.region === r).map(p => personChip(p)).join('');
-        html += `<div class="c">${c}</div><div class="col west">${col('西洋')}</div><div class="col japan">${col('日本')}</div>`;
+        const col = r => {
+          const ev = evs.filter(e => e.r === r && centuryOf(e.y) === c);
+          const pp = ps.filter(p => p.region === r && centuryOf(p.y) === c);
+          return (ev.length ? `<ul class="evlist">${ev.map(evItem).join('')}</ul>` : '') +
+            (pp.length ? `<div class="chips">${pp.map(p => personChip(p)).join('')}</div>` : '');
+        };
+        html += `<div class="c">${c}<small>世紀</small></div><div class="col west">${col('西洋')}</div><div class="col japan">${col('日本')}</div>`;
       }
+    } else {
+      html += '<div class="c"></div><div class="col west"><p class="lead">表示する項目を選んでください。</p></div><div class="col japan"></div>';
     }
     $('#tl').innerHTML = html;
   }
@@ -722,6 +747,17 @@
       else if (qz.answered != null && e.key === 'Enter' && e.target.id !== 'qnext') { e.preventDefault(); nextQuestion(); }
     }
   });
+
+  // ───────── 明るい／暗い表示の切り替え（初期は明るい表示） ─────────
+  const themeBtn = $('#themeBtn');
+  function setTheme(t) {
+    if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
+    try { localStorage.setItem('jinmei-theme', t); } catch (e) { /* ignore */ }
+  }
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  themeBtn.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 
   // ───────── ルーティング ─────────
   const ROUTES = { dict: renderDict, timeline: renderTimeline, cards: renderCards, quiz: renderQuiz, stats: renderStats };
