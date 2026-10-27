@@ -32,6 +32,32 @@
   });
   const BY_ID = new Map(PEOPLE.map(p => [p.id, p]));
 
+  // 出来事は「地域:年」で識別する。解説と関連は event-details.js
+  const EV_DETAILS = window.HISTORY_EVENT_DETAILS || {};
+  const RC = { 西洋: 'west', 日本: 'japan', 中国: 'china' };
+  EVENTS.forEach(e => {
+    e.key = `${e.r}:${e.y}`;
+    const x = EV_DETAILS[e.key] || {};
+    e.d = x.d || '';
+    e.see = x.see || [];
+    e.ppl = x.ppl || [];
+  });
+  const EV_BY_KEY = new Map(EVENTS.map(e => [e.key, e]));
+  // 文章に出てくる人名を探す（長い名前から順に照合し、照合済みの部分は消して短い名前の誤検出を防ぐ）
+  const NAME_INDEX = PEOPLE
+    .flatMap(p => [p.name, ...p.alias].filter(n => n.length >= 2).map(n => ({ n, p })))
+    .sort((a, b) => b.n.length - a.n.length);
+  function peopleIn(text) {
+    let t = text;
+    const found = [];
+    for (const { n, p } of NAME_INDEX) {
+      if (!t.includes(n)) continue;
+      if (!found.includes(p)) found.push(p);
+      t = t.split(n).join('\u0000');
+    }
+    return found;
+  }
+
   // ───────── 小道具 ─────────
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -213,9 +239,25 @@
   const personChip = (p, withLife = true) =>
     `<button class="chip ${p.rc}" data-open="${esc(p.id)}">${esc(p.name)}${withLife ? `<small>${esc(lifeOf(p))}</small>` : ''}</button>`;
 
-  const evItem = e => `<li class="ev ${({ 西洋: 'west', 日本: 'japan', 中国: 'china' })[e.r]}"><b>${esc(e.l || fy(e.y))}</b><span>${esc(e.t)}</span></li>`;
+  // 出来事へのリンク（クリックで出来事の詳細を開く）
+  const evItem = (e, showRegion = false) =>
+    `<li class="ev ${RC[e.r]}"><button class="ev-link" data-ev="${esc(e.key)}"><b>${esc(e.l || fy(e.y))}</b>${showRegion ? `<span class="badge ${RC[e.r]}">${e.r}</span>` : ''}<span>${esc(e.t)}</span></button></li>`;
+  const evList = (list, showRegion) => `<ul class="evlist">${list.map(e => evItem(e, showRegion)).join('')}</ul>`;
 
-  // ───────── 詳細ダイアログ ─────────
+  // ───────── 詳細ダイアログ（人物・出来事の両方を表示。たどった順に「戻る」で戻れる） ─────────
+  let dlgCur = null;
+  const dlgHist = [];
+  function navDlg(kind, key, isBack) {
+    const same = dlgCur && dlgCur.kind === kind && dlgCur.key === key;
+    if (!isBack && dlg.open && dlgCur && !same) dlgHist.push(dlgCur);
+    dlgCur = { kind, key };
+    return same;
+  }
+  const backBtn = () => (dlgHist.length ? '<button class="back" data-back>← 戻る</button>' : '');
+  function showDlg(keepScroll) {
+    if (!dlg.open) dlg.showModal();
+    if (!keepScroll) dlg.scrollTop = 0;
+  }
   function contemporaries(p, region, n) {
     return PEOPLE
       .filter(q => q !== p && q.region === region && q.from < p.to && q.to > p.from)
@@ -223,9 +265,10 @@
       .slice(0, n)
       .sort((a, b) => a.y - b.y);
   }
-  function openDetail(id) {
+  function openDetail(id, isBack) {
     const p = BY_ID.get(id);
     if (!p) return;
+    const keepScroll = navDlg('p', id, isBack);
     const r = S.prog[id];
     const other = p.region === '西洋' ? '日本' : '西洋';
     const peersOther = contemporaries(p, other, 8);
@@ -233,6 +276,7 @@
     const lifeEvents = EVENTS.filter(e => e.r === p.region && e.y >= (p.born ?? p.from) && e.y <= p.to);
     dlg.innerHTML = `
       <article class="detail">
+        ${backBtn()}
         <button class="close" data-close aria-label="閉じる">×</button>
         <div class="badges">${regionBadge(p)}<span class="badge">${esc(p.era)}</span><span class="badge">${esc(p.cat)}</span></div>
         <h2>${esc(p.name)}</h2>
@@ -241,7 +285,7 @@
         <p class="desc lead-desc">${esc(p.desc)}</p>
         <div class="chips">${p.keys.map(k => `<span class="chip">${esc(k)}</span>`).join('')}</div>
         ${p.detail ? `<h3>くわしい解説</h3><p class="detail-text">${esc(p.detail)}</p>` : ''}
-        ${lifeEvents.length ? `<h3>生きた時代の${p.region}の出来事</h3><ul class="evlist">${lifeEvents.map(evItem).join('')}</ul>` : ''}
+        ${lifeEvents.length ? `<h3>生きた時代の${p.region}の出来事</h3>${evList(lifeEvents)}` : ''}
 
         <h3>学習状況</h3>
         <div class="learn">
@@ -265,11 +309,61 @@
       S.noteT[id] = Date.now();
       save();
     });
-    if (!dlg.open) dlg.showModal();
-    dlg.scrollTop = 0;
+    showDlg(keepScroll);
   }
+
+  // 出来事の詳細
+  function openEvent(key, isBack) {
+    const e = EV_BY_KEY.get(key);
+    if (!e) return;
+    navDlg('e', key, isBack);
+    const named = [...new Set([...e.ppl.map(n => BY_ID.get(n)).filter(Boolean), ...peopleIn(`${e.t} ${e.d}`)])].sort((a, b) => a.y - b.y);
+    const see = e.see.map(k => EV_BY_KEY.get(k)).filter(Boolean).sort((a, b) => a.y - b.y);
+    const sameRegion = EVENTS.filter(x => x.r === e.r);
+    const i = sameRegion.indexOf(e);
+    const before = sameRegion.slice(Math.max(0, i - 3), i);
+    const after = sameRegion.slice(i + 1, i + 4);
+    // ほかの地域の近い年の出来事（5年以内が少なければ30年以内まで広げる）
+    const nearOthers = within => EVENTS
+      .filter(x => x.r !== e.r && Math.abs(x.y - e.y) <= within && !see.includes(x))
+      .sort((a, b) => Math.abs(a.y - e.y) - Math.abs(b.y - e.y));
+    let world = nearOthers(5);
+    if (world.length < 3) world = nearOthers(30).slice(0, 4);
+    world = world.slice(0, 6).sort((a, b) => a.y - b.y);
+    const living = PEOPLE
+      .filter(p => p.region === e.r && !named.includes(p) && p.from <= e.y && e.y <= p.to)
+      .sort((a, b) => a.y - b.y)
+      .slice(0, 12);
+    const when = e.l ? e.l.replace(/^(\d+)頃$/, '$1年頃') : `${fy(e.y)}年`;
+    dlg.innerHTML = `
+      <article class="detail ev-detail">
+        ${backBtn()}
+        <button class="close" data-close aria-label="閉じる">×</button>
+        <div class="badges"><span class="badge ${RC[e.r]}">${e.r}</span><span class="badge">${centuryOf(e.y)}世紀</span><span class="badge">出来事</span></div>
+        <p class="life">${esc(when)}</p>
+        <h2>${esc(e.t)}</h2>
+        ${e.d ? `<h3>くわしい解説</h3><p class="detail-text">${esc(e.d)}</p>` : ''}
+        ${named.length ? `<h3>関係する人物</h3><div class="chips">${named.map(p => personChip(p)).join('')}</div>` : ''}
+        ${see.length ? `<h3>つながりのある出来事</h3>${evList(see, true)}` : ''}
+        <h3>${e.r}の前後の流れ</h3>
+        <ul class="evlist flow">
+          ${before.map(x => evItem(x)).join('')}
+          <li class="ev ${RC[e.r]} now"><span class="ev-link"><b>${esc(e.l || fy(e.y))}</b><span>${esc(e.t)}</span></span></li>
+          ${after.map(x => evItem(x)).join('')}
+        </ul>
+        ${world.length ? `<h3>同じころのほかの地域</h3>${evList(world, true)}` : ''}
+        ${living.length ? `<h3>このころ生きていた${e.r}の人物</h3><div class="chips">${living.map(p => personChip(p)).join('')}</div>` : ''}
+      </article>`;
+    showDlg(false);
+  }
+
   dlg.addEventListener('click', e => {
-    if (e.target === dlg || e.target.closest('[data-close]')) dlg.close();
+    if (e.target === dlg || e.target.closest('[data-close]')) { dlg.close(); return; }
+    if (e.target.closest('[data-back]')) {
+      const prev = dlgHist.pop();
+      if (prev) (prev.kind === 'p' ? openDetail : openEvent)(prev.key, true);
+      return;
+    }
     const f = e.target.closest('[data-fav]');
     if (f) {
       const id = f.dataset.fav;
@@ -280,10 +374,17 @@
       openDetail(id);
     }
   });
-  dlg.addEventListener('close', () => { if (current === 'dict') updateList(); if (current === 'stats') renderStats(); });
+  dlg.addEventListener('close', () => {
+    dlgHist.length = 0;
+    dlgCur = null;
+    if (current === 'dict') updateList();
+    if (current === 'stats') renderStats();
+  });
   document.addEventListener('click', e => {
     const t = e.target.closest('[data-open]');
-    if (t) { e.preventDefault(); openDetail(t.dataset.open); }
+    if (t) { e.preventDefault(); openDetail(t.dataset.open); return; }
+    const ev = e.target.closest('[data-ev]');
+    if (ev) { e.preventDefault(); openEvent(ev.dataset.ev); }
   });
 
   // ───────── 辞典 ─────────
@@ -374,7 +475,7 @@
     view.innerHTML = `
       <section class="panel">
         <h2>比較年表</h2>
-        <p class="lead">年代順に、大きな出来事と人物（生まれた年）を地域ごとに並べています。「同じころ、ほかの地域では何が？」をつかむのに使ってください。</p>
+        <p class="lead">年代順に、大きな出来事と人物（生まれた年）を地域ごとに並べています。出来事や人物を押すと、くわしい解説と、関係する人物・出来事が開きます。</p>
         <div class="row">
           <label class="f" style="max-width:220px">人物の分野<select id="tlcat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === tl.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
           <label class="f" style="max-width:180px">年代へ移動<select id="tljump"></select></label>
@@ -408,7 +509,7 @@
     const cell = y => { if (!rows.has(y)) rows.set(y, { 西洋: [], 日本: [], 中国: [] }); return rows.get(y); };
     if (tl.ev) {
       EVENTS.filter(e => regions.includes(e.r)).forEach(e => {
-        cell(e.y)[e.r].push(`<div class="tl-ev">${e.l ? `<b>${esc(e.l)}</b>` : ''}${esc(e.t)}</div>`);
+        cell(e.y)[e.r].push(`<button class="tl-ev" data-ev="${esc(e.key)}" title="くわしく見る">${e.l ? `<b>${esc(e.l)}</b>` : ''}${esc(e.t)}<span class="more">›</span></button>`);
       });
     }
     if (tl.ps) {

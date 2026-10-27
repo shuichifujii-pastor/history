@@ -179,6 +179,7 @@ select:focus, input:focus, textarea:focus, button:focus-visible { outline: 2px s
 }
 .badge.west { background: var(--west-bg); color: var(--west); border-color: transparent; }
 .badge.japan { background: var(--japan-bg); color: var(--japan); border-color: transparent; }
+.badge.china { background: var(--china-bg); color: var(--china); border-color: transparent; }
 .lv { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
 .lv::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--lv0); }
 .lv.lv1::before { background: var(--lv1); }
@@ -198,8 +199,16 @@ button.chip:hover { border-color: var(--brand); background: var(--brand-soft); }
 .empty { color: var(--muted); text-align: center; padding: 30px 10px; }
 
 /* ───── events ───── */
-.evlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.ev { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.5; }
+.evlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ev { font-size: 13px; line-height: 1.5; }
+.ev-link {
+  display: flex; gap: 8px; align-items: baseline; width: 100%; text-align: left; background: none; border: 0;
+  padding: 4px 6px; border-radius: 8px; color: var(--ink);
+}
+button.ev-link:hover { background: var(--brand-soft); }
+button.ev-link > span:last-child { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--brand) 35%, transparent); text-underline-offset: 3px; }
+.ev-link .badge { flex: none; }
+.ev.now .ev-link { background: var(--sun-bg); font-weight: 700; }
 .ev b {
   font-family: var(--round); font-size: 12px; padding: 1px 7px; border-radius: 6px; white-space: nowrap;
   background: var(--sun-bg); color: #9a6200;
@@ -245,6 +254,11 @@ dialog#detail {
 }
 dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: blur(2px); }
 .detail { padding: 24px 24px 26px; position: relative; }
+.detail .back {
+  border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 4px 14px;
+  font-size: 13px; font-weight: 700; color: var(--brand); margin-bottom: 8px; font-family: var(--round);
+}
+.ev-detail h2 { font-size: 23px; }
 .detail .close {
   position: absolute; right: 14px; top: 14px; width: 36px; height: 36px; border-radius: 50%;
   border: 1px solid var(--line); background: var(--surface-2); font-size: 18px; line-height: 1;
@@ -282,7 +296,12 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
 .tl .col { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .tl .col:not(:last-child) { border-right: 1px solid var(--line); }
 .tl .col:empty { background: repeating-linear-gradient(0deg, transparent, transparent 3px, color-mix(in srgb, var(--line) 25%, transparent) 3px, color-mix(in srgb, var(--line) 25%, transparent) 4px); }
-.tl-ev { font-size: 13px; line-height: 1.5; padding-left: 10px; border-left: 3px solid var(--sun); }
+.tl-ev {
+  display: block; width: 100%; text-align: left; font-size: 13px; line-height: 1.5; padding: 2px 6px 2px 10px;
+  border: 0; border-left: 3px solid var(--sun); border-radius: 0 8px 8px 0; background: none; color: var(--ink);
+}
+.tl-ev:hover { background: var(--brand-soft); }
+.tl-ev .more { color: var(--brand); font-weight: 700; margin-left: 4px; }
 .tl .col.west .tl-ev { border-left-color: var(--west); }
 .tl .col.japan .tl-ev { border-left-color: var(--japan); }
 .tl .col.china .tl-ev { border-left-color: var(--china); }
