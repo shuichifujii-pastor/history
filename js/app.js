@@ -45,6 +45,28 @@
     e.ppl = x.ppl || [];
   });
   const EV_BY_KEY = new Map(EVENTS.map(e => [e.key, e]));
+
+  // 読みにくい言葉の読み仮名（yomi.js）。辞典に載っている日本の人物の名前は「よみ」から自動で加える
+  const YOMI = { ...(window.HISTORY_YOMI || {}) };
+  PEOPLE.forEach(p => {
+    if (p.region === '日本' && /[一-龥]/.test(p.name) && /^[ぁ-ゖー]+$/.test(p.sub || '') && !(p.name in YOMI)) YOMI[p.name] = p.sub;
+  });
+  const YOMI_RE = new RegExp(Object.keys(YOMI).sort((a, b) => b.length - a.length)
+    .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+  // 文章の中で各語が最初に出てきたところに（よみ）を小さく添える。skip（その人物自身の名前など）には付けない
+  function withYomi(text, skip) {
+    if (!text) return '';
+    const used = new Set(skip ? [skip] : []);
+    let out = '', last = 0;
+    for (const m of text.matchAll(YOMI_RE)) {
+      const w = m[0], end = m.index + w.length;
+      if (used.has(w) || /^（[ぁ-ゖー／]+）/.test(text.slice(end))) continue;   // すでに読みが書いてあるものは除く
+      used.add(w);
+      out += `${esc(text.slice(last, end))}<span class="yomi" data-w="${esc(w)}">（${esc(YOMI[w])}）</span>`;
+      last = end;
+    }
+    return out + esc(text.slice(last));
+  }
   // 文章に出てくる人名を探す（長い名前から順に照合し、照合済みの部分は消して短い名前の誤検出を防ぐ）
   const NAME_INDEX = PEOPLE
     .flatMap(p => [p.name, ...p.alias].filter(n => n.length >= 2).map(n => ({ n, p })))
@@ -312,7 +334,7 @@
         <p class="life">${esc(lifeOf(p))}</p>
         <p class="desc lead-desc">${esc(p.desc)}</p>
         <div class="chips">${p.keys.map(k => `<span class="chip">${esc(k)}</span>`).join('')}</div>
-        ${p.detail ? `<h3>くわしい解説</h3><p class="detail-text">${esc(p.detail)}</p>` : ''}
+        ${p.detail ? `<h3>くわしい解説</h3><p class="detail-text">${p.region === '日本' ? withYomi(p.detail, p.name) : esc(p.detail)}</p>` : ''}
         ${lifeEvents.length ? `<h3>生きた時代の${p.region}の出来事</h3>${evList(lifeEvents)}` : ''}
 
         <h3>学習状況</h3>
@@ -374,8 +396,8 @@
         <div class="badges"><span class="badge ${RC[e.r]}">${e.r}</span><span class="badge">${centuryOf(e.y)}世紀</span><span class="badge">出来事</span></div>
         <p class="life">${esc(when)}</p>
         <h2>${esc(e.t)}</h2>
-        ${e.d ? `<h3>くわしい解説</h3><p class="detail-text">${esc(e.d)}</p>` : ''}
-        ${e.more ? `<h3>背景とその後</h3><p class="detail-text">${esc(e.more)}</p>` : ''}
+        ${e.d ? `<h3>くわしい解説</h3><p class="detail-text">${e.r === '日本' ? withYomi(e.d) : esc(e.d)}</p>` : ''}
+        ${e.more ? `<h3>背景とその後</h3><p class="detail-text">${e.r === '日本' ? withYomi(e.more) : esc(e.more)}</p>` : ''}
         ${named.length ? `<h3>関係する人物</h3><div class="chips">${named.map(p => personChip(p)).join('')}</div>` : ''}
         ${see.length ? `<h3>つながりのある出来事</h3>${evList(see, true)}` : ''}
         <h3>${e.r}の前後の流れ</h3>
@@ -1290,6 +1312,14 @@
   function readText(el) {
     const c = el.cloneNode(true);
     c.querySelectorAll('.pt,.lv,.star,.more,.close,[data-back]').forEach(x => x.remove());
+    // 読み仮名のある言葉は、漢字の代わりに読み仮名で読む（同じ言葉を二度読まないように）
+    c.querySelectorAll('.yomi').forEach(y => {
+      const prev = y.previousSibling, w = y.dataset.w;
+      if (prev && prev.nodeType === 3 && prev.textContent.endsWith(w)) {
+        prev.textContent = prev.textContent.slice(0, -w.length) + y.textContent.slice(1, -1).split('／')[0];
+      }
+      y.remove();
+    });
     // 年だけの表示（出来事の年、年表の年・和暦）には「年」を付ける
     c.querySelectorAll('.ev-link > b, .gs-yr, .wk span').forEach(b => { if (/\d$|元$/.test(b.textContent)) b.textContent += '年'; });
     if (c.classList.contains('y') && c.firstChild && c.firstChild.nodeType === 3) c.firstChild.textContent += '年';

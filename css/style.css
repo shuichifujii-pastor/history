@@ -523,3 +523,7 @@ dialog#detail::backdrop { background: rgba(30, 40, 80, .45); backdrop-filter: bl
   .detail { padding: 20px 16px 22px; }
   .today { grid-template-columns: 1fr; }
 }
+
+/* 読みにくい言葉の読み仮名（日本の解説） */
+.yomi { font-size: .78em; color: var(--muted); font-weight: normal; }
+
