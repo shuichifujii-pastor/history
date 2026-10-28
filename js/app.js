@@ -1314,7 +1314,11 @@
     const all = $$(READ_BLOCKS, root).filter(el => el.getClientRects().length && readText(el));
     return all.filter(el => !all.some(o => o !== el && o.contains(el)));   // 外側の要素だけ残す
   }
-  const jaVoice = () => (synth.getVoices() || []).find(v => /^ja/i.test(v.lang));
+  // 日本語の音声（端末内の音声を優先。見つからなければ lang の指定だけで端末に任せる）
+  const jaVoice = () => {
+    const vs = (synth.getVoices() || []).filter(v => /^ja/i.test(v.lang));
+    return vs.find(v => v.localService) || vs[0];
+  };
 
   function renderTtsBar() {
     // 詳細ページ（ダイアログ）は常に最前面に表示されるため、開いている間は操作の帯をその中へ移す
@@ -1334,10 +1338,11 @@
          <button data-tts="stop">⏹ 停止</button>${rateSel}<button data-tts="exit" aria-label="読み上げモードを終える">×</button>`
       : `<span class="tts-st">👆 読み上げたい場所をタップしてください</span>${rateSel}<button data-tts="exit" aria-label="読み上げモードを終える">×</button>`;
   }
-  function markReading(el) {
+  function markReading(el, scroll) {
     $$('.reading').forEach(x => x.classList.remove('reading'));
     if (!el) return;
     el.classList.add('reading');
+    if (!scroll) return;
     const r = el.getBoundingClientRect();
     const scroller = dlg.open && dlg.contains(el) ? dlg : null;
     const viewH = scroller ? scroller.clientHeight : innerHeight;
@@ -1351,14 +1356,29 @@
       tts.parts = tts.i < tts.blocks.length ? splitParts(readText(tts.blocks[tts.i])) : [];
     }
     if (tts.i >= tts.blocks.length) { stopTts(); return; }
-    if (tts.j === 0) markReading(tts.blocks[tts.i]);
+    const block = tts.blocks[tts.i];
+    if (tts.j === 0) markReading(block);
     const u = new SpeechSynthesisUtterance(tts.parts[tts.j]);
     u.lang = 'ja-JP';
-    const v = jaVoice();
+    const v = tts.plainVoice ? null : jaVoice();
     if (v) u.voice = v;
     u.rate = tts.rate;
+    // 画面を送るのは、実際に声が出始めてから（声が出ない端末で画面だけが下へ流れないように）
+    u.onstart = () => {
+      if (session !== tts.session) return;
+      tts.fails = 0;
+      if (tts.j === 0) markReading(block, true);
+    };
     u.onend = () => { if (session !== tts.session) return; tts.j++; speakNext(session); };
-    u.onerror = () => { if (session !== tts.session) return; tts.j++; speakNext(session); };
+    u.onerror = e => {
+      if (session !== tts.session) return;
+      // 失敗したら同じ文を1回だけ、音声の指定なしでやり直す。それでもだめなら先へ進まずに止める
+      tts.fails = (tts.fails || 0) + 1;
+      if (tts.fails === 1) { tts.plainVoice = true; setTimeout(() => speakNext(session), 250); return; }
+      stopTts();
+      toast(`読み上げを始められませんでした（${(e && e.error) || '音声の不具合'}）。端末の設定で日本語の読み上げ音声が使えるか確認してください`);
+    };
+    if (synth.paused) synth.resume();   // 一部の Android で止まったままになるのを防ぐ
     synth.speak(u);
   }
   function startTtsAt(target) {
@@ -1367,11 +1387,16 @@
     let i = blocks.findIndex(b => b.contains(target) || target.contains(b));
     if (i < 0) i = blocks.findIndex(b => target.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     if (i < 0) return;
+    const busy = synth.speaking || synth.pending;
     synth.cancel();
     tts.session++;
-    Object.assign(tts, { blocks, i, j: 0, parts: splitParts(readText(blocks[i])), speaking: true, paused: false });
+    Object.assign(tts, { blocks, i, j: 0, parts: splitParts(readText(blocks[i])), speaking: true, paused: false, fails: 0 });
     renderTtsBar();
-    speakNext(tts.session);
+    // 読み上げ中に別の場所をタップしたときは、止めてから少し待って始める
+    // （止めた直後に始めると、新しい読み上げまで取り消してしまう端末があるため）
+    const s = tts.session;
+    if (busy) setTimeout(() => speakNext(s), 150);
+    else speakNext(s);
   }
   function stopTts() {
     tts.session++;
