@@ -73,7 +73,9 @@
   // 明治以降の和暦。改元の年は両方を返す（1912 → ['明治45', '大正元']）
   const WAREKI = [['明治', 1868, 1912], ['大正', 1912, 1926], ['昭和', 1926, 1989], ['平成', 1989, 2019], ['令和', 2019, Infinity]];
   const wareki = y => WAREKI.filter(([, s, e]) => s <= y && y <= e).map(([n, s]) => `${n}${y === s ? '元' : y - s + 1}`);
-  const lifeOf = p => p.life || (p.born != null && p.died == null ? `${fy(p.born)}–` : `${p.born != null ? fy(p.born) : '?'}–${p.died != null ? fy(p.died) : '?'}`);
+  // 生年（明治以降に生まれた人物は元号も添える：1901（明治34））
+  const bornOf = y => (y >= 1868 ? `${fy(y)}（${wareki(y).join('／')}）` : fy(y));
+  const lifeOf = p => p.life || (p.born != null && p.died == null ? `${bornOf(p.born)}–` : `${p.born != null ? bornOf(p.born) : '?'}–${p.died != null ? fy(p.died) : '?'}`);
   const centuryOf = y => Math.max(1, Math.floor((y - 1) / 100) + 1);
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const view = $('#view');
@@ -1293,6 +1295,9 @@
     if (c.classList.contains('y') && c.firstChild && c.firstChild.nodeType === 3) c.firstChild.textContent += '年';
     c.querySelectorAll('small,span,b,.badge').forEach(x => x.before(' '));
     return c.textContent
+      // 元号つきの生年「1901（明治34）–1989」を「1901年（明治34年）から1989年」のように読む
+      .replace(/(\d+)（((?:明治|大正|昭和|平成|令和)[^）]*)）\s*–\s*(\d+)?/g, (m, y, wk, d) =>
+        `${y}年（${wk.split('／').map(x => `${x}年`).join('／')}）${d ? `から${d}年` : '生まれ'}`)
       // 生没年などの「1483–1546」を「1483年から1546年」のように読む
       .replace(/\?\s*–\s*(前?\d+)(頃)?/g, '$1年$2没')
       .replace(/(前?\d+)(頃)?\s*–\s*(前?\d+)(頃|年代)?/g, (m, a, b, c2, d) => `${a}年${b || ''}から${c2}${d === '年代' ? '年代' : `年${d || ''}`}`)
