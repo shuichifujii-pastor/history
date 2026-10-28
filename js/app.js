@@ -1359,7 +1359,7 @@
     const block = tts.blocks[tts.i];
     if (tts.j === 0) markReading(block);
     const u = new SpeechSynthesisUtterance(tts.parts[tts.j]);
-    u.lang = 'ja-JP';
+    if (!tts.noLang) u.lang = 'ja-JP';
     const v = tts.plainVoice ? null : jaVoice();
     if (v) u.voice = v;
     u.rate = tts.rate;
@@ -1372,11 +1372,19 @@
     u.onend = () => { if (session !== tts.session) return; tts.j++; speakNext(session); };
     u.onerror = e => {
       if (session !== tts.session) return;
-      // 失敗したら同じ文を1回だけ、音声の指定なしでやり直す。それでもだめなら先へ進まずに止める
+      // 失敗したら同じ文を、間をおきながら指定をゆるめてやり直す（Android は音声の準備が整う前だと失敗するため）
+      //   1回目：音声の指定なし → 2回目：言語の指定もなし（端末の標準の音声に任せる） → 3回目：少し長く待つ
+      // それでもだめなら先へ進まずに止める
       tts.fails = (tts.fails || 0) + 1;
-      if (tts.fails === 1) { tts.plainVoice = true; setTimeout(() => speakNext(session), 250); return; }
+      if (tts.fails <= 3) {
+        if (tts.fails === 1) tts.plainVoice = true;
+        if (tts.fails === 2) tts.noLang = true;
+        setTimeout(() => speakNext(session), [0, 300, 700, 1500][tts.fails]);
+        return;
+      }
+      tts.noLang = false;   // 次に試すときは言語の指定から戻す
       stopTts();
-      toast(`読み上げを始められませんでした（${(e && e.error) || '音声の不具合'}）。端末の設定で日本語の読み上げ音声が使えるか確認してください`);
+      toast(`読み上げを始められませんでした（${(e && e.error) || '音声の不具合'}）。端末の「テキスト読み上げ」の設定で日本語の音声が使えるか確認してください`);
     };
     if (synth.paused) synth.resume();   // 一部の Android で止まったままになるのを防ぐ
     synth.speak(u);
