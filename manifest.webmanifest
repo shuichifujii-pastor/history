@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "歴史人名辞典",
   "short_name": "人名辞典",
   "description": "紀元後の西洋史・日本史の人物を調べて、カードとクイズで覚える学習用の人名辞典",
@@ -6,8 +6,8 @@
   "start_url": "./",
   "scope": "./",
   "display": "browser",
-  "background_color": "#f3f7ff",
-  "theme_color": "#6a5cff",
+  "background_color": "#f6f2ea",
+  "theme_color": "#34479a",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
