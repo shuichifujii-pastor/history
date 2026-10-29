@@ -67,6 +67,89 @@
     }
     return out + esc(text.slice(last));
   }
+
+  // ───────── ゆかりの地（地図） ─────────
+  // 日本の人物・出来事の解説に出てくる地名（places.js）を探し、詳細ページに地図と現在の場所を出す
+  const PLACES = window.HISTORY_PLACES || [];
+  const PLACE_KEYS = PLACES.flatMap(pl => pl.k.map(k => ({ k, pl }))).sort((a, b) => b.k.length - a.k.length);
+  const NOT_PLACES = ['陸奥宗光', '今熊野', '吉野作造'];   // 地名を含むが地名ではない語（先に消しておく）
+  function placesIn(text) {
+    let t = text || '';
+    NOT_PLACES.forEach(w => { t = t.split(w).join('\u0000'); });
+    const found = new Map();   // 場所 → 文章の中で最初に出てくる位置
+    for (const { k, pl } of PLACE_KEYS) {
+      const at = t.indexOf(k);
+      if (at < 0) continue;
+      if (!found.has(pl) || at < found.get(pl)) found.set(pl, at);
+      t = t.split(k).join('\u0000'.repeat(k.length));   // 位置がずれないよう同じ長さで消す
+    }
+    return [...found].sort((a, b) => a[1] - b[1]).map(([pl]) => pl);
+  }
+  function placesHtml(list) {
+    if (!list.length) return '';
+    return `<h3>ゆかりの地</h3>
+      <div class="pmap" id="pmap" aria-label="ゆかりの地の地図"></div>
+      <ul class="plist">${list.map((pl, i) => `<li><button data-place="${i}"><b>${esc(pl.n)}</b><span>現在の${esc(pl.now)}${pl.kind === '国' ? '（国のおおよその位置）' : ''}</span></button></li>`).join('')}</ul>`;
+  }
+  // 地図の部品（Leaflet）は、地図を出すときに初めて読み込む
+  let leafletP = null;
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    if (!leafletP) {
+      leafletP = new Promise((res, rej) => {
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+        document.head.appendChild(css);
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+        s.onload = () => res(window.L);
+        s.onerror = () => { leafletP = null; rej(new Error('leaflet')); };
+        document.head.appendChild(s);
+      });
+    }
+    return leafletP;
+  }
+  let pmap = null, pmarks = [];
+  function drawPlaceMap(list) {
+    if (pmap) { pmap.remove(); pmap = null; pmarks = []; }
+    const box = $('#pmap', dlg);
+    if (!box) return;
+    loadLeaflet().then(L => {
+      if (!box.isConnected) return;
+      pmap = L.map(box, { scrollWheelZoom: false, zoomSnap: 0.5 });
+      // ふだんは国土地理院の地図。日本の外の場所があるときは、世界中を描ける OpenStreetMap にする
+      if (list.some(pl => pl.abroad)) {
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          minZoom: 3, maxZoom: 18,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+        }).addTo(pmap);
+      } else {
+        L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+          minZoom: 4, maxZoom: 18,
+          attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>',
+        }).addTo(pmap);
+      }
+      const css = getComputedStyle(document.documentElement);
+      const jp = css.getPropertyValue('--japan').trim(), br = css.getPropertyValue('--brand').trim();
+      pmarks = list.map(pl => {
+        const wide = pl.kind === '国';
+        const m = L.circleMarker(pl.ll, wide
+          ? { radius: 16, color: br, weight: 1.5, dashArray: '4 3', fillColor: br, fillOpacity: 0.15 }
+          : { radius: 8, color: '#fff', weight: 2, fillColor: jp, fillOpacity: 0.95 }).addTo(pmap);
+        m.bindTooltip(esc(pl.n), { direction: 'top', offset: [0, wide ? -14 : -8], permanent: list.length <= 4 });
+        m.bindPopup(`<b>${esc(pl.n)}</b><br>現在の${esc(pl.now)}${wide ? '<br><small>国の範囲は広いので、おおよその中心に置いています</small>' : ''}`);
+        return m;
+      });
+      fitPlaces();
+    }).catch(() => { box.innerHTML = '<p class="lead">地図を読み込めませんでした。インターネットの接続を確かめてください。</p>'; });
+  }
+  function fitPlaces() {
+    if (!pmap || !pmarks.length) return;
+    pmap.invalidateSize();
+    if (pmarks.length === 1) pmap.setView(pmarks[0].getLatLng(), 9);
+    else pmap.fitBounds(window.L.latLngBounds(pmarks.map(m => m.getLatLng())), { padding: [30, 30], maxZoom: 10 });
+  }
   // 文章に出てくる人名を探す（長い名前から順に照合し、照合済みの部分は消して短い名前の誤検出を防ぐ）
   const NAME_INDEX = PEOPLE
     .flatMap(p => [p.name, ...p.alias].filter(n => n.length >= 2).map(n => ({ n, p })))
@@ -324,6 +407,7 @@
     const peersOther = contemporaries(p, other, 8);
     const peersSame = contemporaries(p, p.region, 8);
     const lifeEvents = EVENTS.filter(e => e.r === p.region && e.y >= (p.born ?? p.from) && e.y <= p.to);
+    const places = p.region === '日本' ? placesIn(`${p.desc} ${p.detail}`) : [];
     dlg.innerHTML = `
       <article class="detail">
         ${backBtn()}
@@ -335,6 +419,7 @@
         <p class="desc lead-desc">${esc(p.desc)}</p>
         <div class="chips">${p.keys.map(k => `<span class="chip">${esc(k)}</span>`).join('')}</div>
         ${p.detail ? `<h3>くわしい解説</h3><p class="detail-text">${p.region === '日本' ? withYomi(p.detail, p.name) : esc(p.detail)}</p>` : ''}
+        ${placesHtml(places)}
         ${lifeEvents.length ? `<h3>生きた時代の${p.region}の出来事</h3>${evList(lifeEvents)}` : ''}
 
         <h3>学習状況</h3>
@@ -363,6 +448,7 @@
     });
     showDlg(keepScroll);
     fitNote(note);   // 表示されてから高さを測る
+    drawPlaceMap(places);
   }
 
   // 出来事の詳細
@@ -387,8 +473,9 @@
       .filter(p => p.region === e.r && !named.includes(p) && p.from <= e.y && e.y <= p.to)
       .sort((a, b) => a.y - b.y)
       .slice(0, 12);
+    const places = e.r === '日本' ? placesIn(`${e.t} ${e.d} ${e.more}`) : [];
     const wk = wareki(e.y);
-    const when = (e.l ? e.l.replace(/^(\d+)頃$/, '$1年頃') : `${fy(e.y)}年`) + (wk.length ? `（${wk.map(w => `${w}年`).join('／')}）` : '');
+    const when =(e.l ? e.l.replace(/^(\d+)頃$/, '$1年頃') : `${fy(e.y)}年`) + (wk.length ? `（${wk.map(w => `${w}年`).join('／')}）` : '');
     dlg.innerHTML = `
       <article class="detail ev-detail">
         ${backBtn()}
@@ -398,6 +485,7 @@
         <h2>${esc(e.t)}</h2>
         ${e.d ? `<h3>くわしい解説</h3><p class="detail-text">${e.r === '日本' ? withYomi(e.d) : esc(e.d)}</p>` : ''}
         ${e.more ? `<h3>背景とその後</h3><p class="detail-text">${e.r === '日本' ? withYomi(e.more) : esc(e.more)}</p>` : ''}
+        ${placesHtml(places)}
         ${named.length ? `<h3>関係する人物</h3><div class="chips">${named.map(p => personChip(p)).join('')}</div>` : ''}
         ${see.length ? `<h3>つながりのある出来事</h3>${evList(see, true)}` : ''}
         <h3>${e.r}の前後の流れ</h3>
@@ -410,10 +498,22 @@
         ${living.length ? `<h3>このころ生きていた${e.r}の人物</h3><div class="chips">${living.map(p => personChip(p)).join('')}</div>` : ''}
       </article>`;
     showDlg(false);
+    drawPlaceMap(places);
   }
 
   dlg.addEventListener('click', e => {
     if (e.target === dlg || e.target.closest('[data-close]')) { dlg.close(); return; }
+    // ゆかりの地の一覧を押すと、地図をその場所へ動かす
+    const pb = e.target.closest('[data-place]');
+    if (pb) {
+      const m = pmarks[Number(pb.dataset.place)];
+      if (m) {
+        pmap.setView(m.getLatLng(), Math.max(pmap.getZoom(), 10));
+        m.openPopup();
+        $('#pmap', dlg).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
     if (e.target.closest('[data-back]')) {
       const prev = dlgHist.pop();
       if (prev) (prev.kind === 'p' ? openDetail : openEvent)(prev.key, true);
@@ -1513,7 +1613,7 @@
   document.addEventListener('click', e => {
     if (!tts.mode) return;
     const t = e.target;
-    if (t.closest('.top, #ttsBar, #gsStep, .close, [data-back], input, textarea, select') || t === dlg) return;
+    if (t.closest('.top, #ttsBar, #gsStep, .close, [data-back], .pmap, input, textarea, select') || t === dlg) return;
     if (!t.closest('#view') && !(dlg.open && dlg.contains(t))) return;
     e.preventDefault();
     e.stopPropagation();
