@@ -85,11 +85,28 @@
     }
     return [...found].sort((a, b) => a[1] - b[1]).map(([pl]) => pl);
   }
+  // 人物ごとに登録したゆかりの地（person-places.js）。解説に出てくる地名も、離れた場所なら加える
+  const PERSON_PLACES = window.HISTORY_PERSON_PLACES || {};
+  const ROLE_NAMES = { 生: '生まれた地', 活: '活躍した地', 没: '亡くなった地', 墓: '墓所・陵', ゆ: 'ゆかりの地' };
+  function personPlaces(p) {
+    const list = (PERSON_PLACES[p.name] || []).map(([r, n, now, lat, lng]) => ({
+      n, now, ll: [lat, lng], role: [...r].map(c => ROLE_NAMES[c]).filter(Boolean).join('・'),
+    }));
+    if (p.region === '日本') {
+      const near = (a, b) => Math.abs(a[0] - b[0]) < 0.02 && Math.abs(a[1] - b[1]) < 0.02;
+      placesIn(`${p.desc} ${p.detail}`).forEach(pl => {
+        if (!list.some(x => x.n === pl.n || near(x.ll, pl.ll))) list.push({ ...pl, role: '解説に出てくる地' });
+      });
+    }
+    return list;
+  }
+  // 地理院の地図は日本の外が白くなるので、日本の外かどうかを緯度・経度で判断する（朝鮮半島は対馬より西）
+  const outsideJapan = ([lat, lng]) => !(lat >= 24 && lat <= 46 && lng >= 122.9 && lng <= 146) || (lng < 129.25 && lat > 34.2);
   function placesHtml(list) {
     if (!list.length) return '';
     return `<h3>ゆかりの地</h3>
       <div class="pmap" id="pmap" aria-label="ゆかりの地の地図"></div>
-      <ul class="plist">${list.map((pl, i) => `<li><button data-place="${i}"><b>${esc(pl.n)}</b><span>現在の${esc(pl.now)}${pl.kind === '国' ? '（国のおおよその位置）' : ''}</span></button></li>`).join('')}</ul>`;
+      <ul class="plist">${list.map((pl, i) => `<li><button data-place="${i}">${pl.role ? `<i>${esc(pl.role)}</i>` : ''}<b>${esc(pl.n)}</b><span>現在の${esc(pl.now)}${pl.kind === '国' ? '（国のおおよその位置）' : ''}</span></button></li>`).join('')}</ul>`;
   }
   // 地図の部品（Leaflet）は、地図を出すときに初めて読み込む
   let leafletP = null;
@@ -111,7 +128,7 @@
     return leafletP;
   }
   let pmap = null, pmarks = [];
-  function drawPlaceMap(list) {
+  function drawPlaceMap(list, region) {
     if (pmap) { pmap.remove(); pmap = null; pmarks = []; }
     const box = $('#pmap', dlg);
     if (!box) return;
@@ -119,7 +136,7 @@
       if (!box.isConnected) return;
       pmap = L.map(box, { scrollWheelZoom: false, zoomSnap: 0.5 });
       // ふだんは国土地理院の地図。日本の外の場所があるときは、世界中を描ける OpenStreetMap にする
-      if (list.some(pl => pl.abroad)) {
+      if (list.some(pl => pl.abroad || outsideJapan(pl.ll))) {
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
           minZoom: 3, maxZoom: 18,
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
@@ -131,14 +148,14 @@
         }).addTo(pmap);
       }
       const css = getComputedStyle(document.documentElement);
-      const jp = css.getPropertyValue('--japan').trim(), br = css.getPropertyValue('--brand').trim();
+      const jp = css.getPropertyValue(region === '西洋' ? '--west' : '--japan').trim(), br = css.getPropertyValue('--brand').trim();
       pmarks = list.map(pl => {
         const wide = pl.kind === '国';
         const m = L.circleMarker(pl.ll, wide
           ? { radius: 16, color: br, weight: 1.5, dashArray: '4 3', fillColor: br, fillOpacity: 0.15 }
           : { radius: 8, color: '#fff', weight: 2, fillColor: jp, fillOpacity: 0.95 }).addTo(pmap);
         m.bindTooltip(esc(pl.n), { direction: 'top', offset: [0, wide ? -14 : -8], permanent: list.length <= 4 });
-        m.bindPopup(`<b>${esc(pl.n)}</b><br>現在の${esc(pl.now)}${wide ? '<br><small>国の範囲は広いので、おおよその中心に置いています</small>' : ''}`);
+        m.bindPopup(`${pl.role ? `<small>${esc(pl.role)}</small><br>` : ''}<b>${esc(pl.n)}</b><br>現在の${esc(pl.now)}${wide ? '<br><small>国の範囲は広いので、おおよその中心に置いています</small>' : ''}`);
         return m;
       });
       fitPlaces();
@@ -407,7 +424,7 @@
     const peersOther = contemporaries(p, other, 8);
     const peersSame = contemporaries(p, p.region, 8);
     const lifeEvents = EVENTS.filter(e => e.r === p.region && e.y >= (p.born ?? p.from) && e.y <= p.to);
-    const places = p.region === '日本' ? placesIn(`${p.desc} ${p.detail}`) : [];
+    const places = personPlaces(p);
     dlg.innerHTML = `
       <article class="detail">
         ${backBtn()}
@@ -448,7 +465,7 @@
     });
     showDlg(keepScroll);
     fitNote(note);   // 表示されてから高さを測る
-    drawPlaceMap(places);
+    drawPlaceMap(places, p.region);
   }
 
   // 出来事の詳細
