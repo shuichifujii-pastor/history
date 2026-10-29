@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   /* 和紙のような生成りの地に、藍（ブランド）・朱（日本）・瑠璃（西洋）・黄土（中国）の伝統色 */
   --bg: #f6f2ea;
   --bg-2: #f1ece2;
@@ -532,3 +532,19 @@ dialog#detail::backdrop { background: rgba(25, 25, 35, .5); backdrop-filter: blu
 /* 読みにくい言葉の読み仮名（日本の解説） */
 .yomi { font-size: .78em; color: var(--muted); font-weight: normal; }
 
+
+/* 年表：日本の時代の区切り（時代が変わるところに入る帯）と、日本の欄の時代ごとの色分け */
+.tl .tl-era {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
+  padding: 9px 14px 8px; background: var(--japan-bg); border-top: 2px solid var(--japan);
+  scroll-margin-top: calc(var(--hdr, 64px) + 46px);
+}
+.tl-era .badge { align-self: center; }
+.tl-era b { font-family: var(--serif); font-size: 17px; color: var(--japan); letter-spacing: .06em; }
+.tl-era .span { font-family: var(--serif); font-weight: 700; font-size: 13px; color: var(--ink); }
+.tl-era small { flex-basis: 100%; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.tl .col.japan.alt, .tl .col.japan.alt:empty { background-color: color-mix(in srgb, var(--japan-bg) 75%, transparent); }
+@media (max-width: 720px) {
+  .tl .tl-era { padding: 7px 10px; }
+  .tl-era b { font-size: 15px; }
+}

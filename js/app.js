@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
   'use strict';
 
   // ───────── データ準備 ─────────
@@ -568,7 +568,7 @@
         <p class="lead">年代順に、大きな出来事と人物（生まれた年）を地域ごとに並べています。出来事や人物を押すと、くわしい解説と、関係する人物・出来事が開きます。</p>
         <div class="row">
           <label class="f" style="max-width:220px">人物の分野<select id="tlcat"><option value="">すべての分野</option>${CATS.map(c => `<option${c === tl.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
-          <label class="f" style="max-width:180px">年代へ移動<select id="tljump"></select></label>
+          <label class="f" style="max-width:220px">時代・年代へ移動<select id="tljump"></select></label>
         </div>
         <div class="row" style="margin-top:6px">
           <label class="check"><input type="checkbox" id="tlev"${tl.ev ? ' checked' : ''}> 出来事</label>
@@ -582,11 +582,30 @@
     $('#tlps').addEventListener('change', e => { tl.ps = e.target.checked; drawTimeline(); });
     $('#tlcn').addEventListener('change', e => { tl.cn = e.target.checked; drawTimeline(); });
     $('#tljump').addEventListener('change', e => {
-      const row = $(`#tl [data-c="${e.target.value}"]`);
+      const v = e.target.value;
+      const row = v.startsWith('e') ? $(`#tl [data-era="${v.slice(1)}"]`) : $(`#tl [data-c="${v}"]`);
       if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     drawTimeline();
   }
+  // 日本の時代区分（年表の区切りと、日本の欄の色分けに使う）：[名前, 始まり, 表示する期間, ひとこと]
+  const JP_ERAS = [
+    ['弥生・古墳時代', -Infinity, '〜592年', 'ヤマト王権が各地の豪族を従え、大きな古墳が造られた'],
+    ['飛鳥時代', 592, '592〜710年', '推古天皇の即位から平城京遷都まで。仏教が広まり、律令国家の仕組みが整えられた'],
+    ['奈良時代', 710, '710〜794年', '平城京に都が置かれた。大仏が造られ、天平文化が栄えた'],
+    ['平安時代', 794, '794〜1185年', '平安京に都が置かれた。摂関政治や院政が行われ、国風文化が栄えた'],
+    ['鎌倉時代', 1185, '1185〜1333年', '源頼朝が鎌倉に幕府を開き、武士の政権が始まった'],
+    ['南北朝・室町時代', 1334, '1334〜1573年', '建武の新政の後、朝廷が南北に分かれて争い、足利氏が京都の室町に幕府を置いた'],
+    ['戦国・安土桃山時代', 1467, '1467〜1603年', '応仁の乱の後、戦国大名が争い、織田信長・豊臣秀吉が天下統一を進めた（室町幕府は1573年まで）'],
+    ['江戸時代', 1603, '1603〜1868年', '徳川家康が江戸に幕府を開き、約260年にわたる泰平の世が続いた'],
+    ['幕末', 1853, '1853〜1868年', '江戸時代の終わり。ペリー来航から開国、江戸幕府の滅亡まで'],
+    ['明治時代', 1868, '1868〜1912年', '明治維新によって近代国家の仕組みが整えられた'],
+    ['大正時代', 1912, '1912〜1926年', '政党政治が広がり、大正デモクラシーと呼ばれる風潮が生まれた'],
+    ['昭和時代', 1926, '1926〜1989年', '戦争と敗戦を経て、日本国憲法のもとで高度経済成長をとげた'],
+    ['平成時代', 1989, '1989〜2019年', '冷戦の終わりとバブル経済の崩壊の後、大きな災害を経験した'],
+    ['令和時代', 2019, '2019年〜', ''],
+  ];
+  const jpEraIdx = y => JP_ERAS.reduce((k, [, s], i) => (y >= s ? i : k), 0);
   // 人物を年表のどの年に置くか
   function tlYear(p) {
     if (p.tl != null) return { y: p.tl, mark: '頃' };   // 並び順を整えるために位置を指定した人物
@@ -614,18 +633,29 @@
     el.style.setProperty('--cols', regions.length);
     let html = `<div class="h">年</div>${regions.map(r => `<div class="h ${TL_COLS[r]}">${r}</div>`).join('')}`;
     const seen = new Set();
+    const eras = [];   // 区切りを入れた日本の時代の番号
     for (const y of years) {
       const c = centuryOf(y);
       const anchor = seen.has(c) ? '' : ` data-c="${c}"`;
       seen.add(c);
+      // 日本の時代が変わるところに区切りの帯を入れる
+      const ei = jpEraIdx(y);
+      if (eras[eras.length - 1] !== ei) {
+        const [name, , span, note] = JP_ERAS[ei];
+        html += `<div class="tl-era" data-era="${ei}"><span class="badge japan">日本</span><b>${name}</b><span class="span">${span}</span>${note ? `<small>${note}</small>` : ''}</div>`;
+        eras.push(ei);
+      }
       const r = rows.get(y);
       const wk = wareki(y);
       const yLabel = `${fy(y)}${wk.length ? `<small class="wk">${wk.map(w => `<span>${w}</span>`).join('')}</small>` : ''}`;
-      html += `<div class="y"${anchor}>${yLabel}</div>${regions.map(g => `<div class="col ${TL_COLS[g]}">${r[g].join('')}</div>`).join('')}`;
+      // 日本の欄は時代ごとに地の色を交互に変える
+      html += `<div class="y"${anchor}>${yLabel}</div>${regions.map(g => `<div class="col ${TL_COLS[g]}${g === '日本' && ei % 2 ? ' alt' : ''}">${r[g].join('')}</div>`).join('')}`;
     }
     if (!years.length) html += `<div class="y"></div><div class="col" style="grid-column: span ${regions.length}"><p class="lead">表示する項目を選んでください。</p></div>`;
     el.innerHTML = html;
-    $('#tljump').innerHTML = `<option value="">選んでください</option>${[...seen].map(c => `<option value="${c}">${c}世紀</option>`).join('')}`;
+    $('#tljump').innerHTML = `<option value="">選んでください</option>
+      <optgroup label="日本の時代">${eras.map(i => `<option value="e${i}">${JP_ERAS[i][0]}</option>`).join('')}</optgroup>
+      <optgroup label="世紀">${[...seen].map(c => `<option value="${c}">${c}世紀</option>`).join('')}</optgroup>`;
     markTlMatches();
   }
 
@@ -1304,7 +1334,7 @@
   // 開いている詳細ページがあればその中を、なければ画面本体を読む。
   const ttsBar = $('#ttsBar');
   const synth = window.speechSynthesis;
-  const READ_BLOCKS = 'h1,h2,h3,p,li,.badges,.pcard,.tl-ev,.tl .chip,.y,.chips > .chip,.opt,.kpi,.bar-row,.face .big,.face .center,.face .desc,.face .chips';
+  const READ_BLOCKS = 'h1,h2,h3,p,li,.badges,.pcard,.tl-era,.tl-ev,.tl .chip,.y,.chips > .chip,.opt,.kpi,.bar-row,.face .big,.face .center,.face .desc,.face .chips';
   const RATES = [0.8, 1, 1.2, 1.5];
   const tts = { mode: false, blocks: [], i: 0, parts: [], j: 0, speaking: false, paused: false, session: 0, rate: 1 };
   try { tts.rate = Number(localStorage.getItem('jinmei-tts-rate')) || 1; } catch (e) { /* ignore */ }
