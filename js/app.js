@@ -589,6 +589,7 @@
   }
   // 人物を年表のどの年に置くか
   function tlYear(p) {
+    if (p.tl != null) return { y: p.tl, mark: '頃' };   // 並び順を整えるために位置を指定した人物
     if (p.born != null) return { y: p.born, mark: '生' };
     if (p.died != null) return { y: p.died, mark: '没' };
     return { y: p.fl, mark: '頃' };
